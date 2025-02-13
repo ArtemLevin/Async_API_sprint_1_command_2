@@ -1,0 +1,66 @@
+# Стандартные исключения для Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.swp
+*.swo
+*.DS_Store
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Исключения для виртуального окружения
+venv/
+.env/
+.venv/
+env/
+ENV/
+env.bak/
+*.env  # Файлы окружения
+
+# Исключения для Docker
+docker-compose.override.yml
+*.log
+docker-compose*.yml
+*.pid
+*.sock
+.dockerignore
+docker-data/  # Директория с данными контейнеров (например, для Redis/Elasticsearch)
+
+# Исключения для Redis
+dump.rdb
+appendonly.aof
+
+# Исключения для Elasticsearch
+elasticsearch-data/
+
+# Исключения для Nginx
+nginx/*.log
+nginx/*.pid
+nginx/*.sock
+
+# Исключения для IDE/редакторов
+.vscode/
+.idea/
+*.iml
+
+# Исключения для тестов
+.tox/
+.coverage
+htmlcov/
+*.cover
+
+# Исключения для Jupyter Notebook (если используете)
+.ipynb_checkpoints/
+
+# Исключения для временных файлов
+*.bak
+*.tmp
+*.~*
+
+# Исключения для файлов системы
+Thumbs.db
+.DS_Store
