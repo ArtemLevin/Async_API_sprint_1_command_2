@@ -77,7 +77,7 @@ async def get_popular_films(
         logger.error("Ошибка при получении популярных фильмов: %s", e)
         raise
 
-@router.get("/films", response_model=List[Film])
+@router.get("/", response_model=List[Film])
 async def get_films_by_genre(
     sort: str = Query("-imdb_rating", description="Поле для сортировки (например, '-imdb_rating')"),
     genre: Optional[str] = Query(None, description="UUID жанра для фильтрации"),
