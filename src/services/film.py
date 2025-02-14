@@ -4,6 +4,10 @@ from elasticsearch import AsyncElasticsearch, helpers
 from redis.asyncio import Redis
 import asyncio
 
+
+from src.db.elastic import get_elastic
+from src.db.redis import get_redis
+
 logger = logging.getLogger(__name__)
 
 class FilmService:
@@ -45,6 +49,64 @@ class FilmService:
         asyncio.create_task(self._cache_film(film_id, film))  # Кэшируем асинхронно
         return film
 
+    async def get_films_by_genre(self, sort: str = "-imdb_rating", genre: str = None, limit: int = 10, offset: int = 0) -> list:
+        """
+        Получить список фильмов с поддержкой сортировки и фильтрации по жанру.
+
+        :param sort: Поле для сортировки (пример: "-imdb_rating" для убывания).
+        :param genre: UUID жанра для фильтрации (пример: <comedy-uuid>).
+        :param limit: Количество фильмов в результате (по умолчанию 10).
+        :param offset: Смещение для пагинации (по умолчанию 0).
+        :return: Список фильмов, соответствующих критериям.
+        """
+        cache_key = f"films:{sort}:{genre}:{limit}:{offset}"  # Ключ для кэша
+        logger.info("Запрос на получение фильмов: sort=%s, genre=%s, limit=%d, offset=%d", sort, genre, limit, offset)
+
+        # Проверяем наличие результата в кэше
+        cached_result = await self.redis.get(cache_key)
+        if cached_result:
+            logger.debug("Фильмы найдены в кэше")
+            return orjson.loads(cached_result)
+
+        # Формируем тело запроса для Elasticsearch
+        body = {
+            "query": {
+                "bool": {
+                    "must": [],
+                    "filter": []
+                }
+            },
+            "sort": [],
+            "from": offset,
+            "size": limit
+        }
+
+        # Добавляем фильтр по жанру, если указан
+        if genre:
+            body["query"]["bool"]["filter"].append({
+                "term": {"genres.id": genre}
+            })
+
+        # Добавляем сортировку
+        if sort.startswith("-"):
+            sort_field = sort[1:]  # Убираем знак минуса
+            body["sort"].append({sort_field: {"order": "desc"}})
+        else:
+            body["sort"].append({sort: {"order": "asc"}})
+
+        try:
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic.search(index="films", body=body)
+            films = [hit["_source"] for hit in response["hits"]["hits"]]
+
+            # Кэшируем результат
+            await self.redis.set(cache_key, orjson.dumps(films), ex=3600)  # Кэш на 1 час
+            logger.info("Фильмы успешно получены. Количество: %d", len(films))
+            return films
+        except Exception as e:
+            logger.error("Ошибка при получении фильмов: %s", e)
+            raise
+
     async def search_films(self, query: str, limit: int = 10, offset: int = 0) -> list:
         """
         Поиск фильмов по ключевым словам.
@@ -70,6 +132,48 @@ class FilmService:
             return films
         except Exception as e:
             logger.error("Ошибка при поиске фильмов в Elasticsearch: %s", e)
+            raise
+
+    async def get_popular_films(self, limit: int = 10, offset: int = 0) -> list:
+        """
+        Получить список наиболее популярных фильмов по убыванию imdb_rating.
+
+        :param limit: Количество фильмов в результате (по умолчанию 10).
+        :param offset: Смещение для пагинации (по умолчанию 0).
+        :return: Список фильмов, отсортированных по убыванию imdb_rating.
+        """
+        cache_key = f"popular_films:{limit}:{offset}"  # Ключ для кэша
+        logger.info("Получение популярных фильмов. Лимит: %d, Смещение: %d", limit, offset)
+
+        # Проверяем наличие результата в кэше
+        cached_result = await self.redis.get(cache_key)
+        if cached_result:
+            logger.debug("Популярные фильмы найдены в кэше")
+            return orjson.loads(cached_result)
+
+        # Формируем тело запроса для Elasticsearch
+        body = {
+            "query": {
+                "match_all": {}  # Выбираем все фильмы
+            },
+            "sort": [
+                {"imdb_rating": {"order": "desc"}}  # Сортировка по убыванию рейтинга
+            ],
+            "from": offset,
+            "size": limit
+        }
+
+        try:
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic.search(index="films", body=body)
+            films = [hit["_source"] for hit in response["hits"]["hits"]]
+
+            # Кэшируем результат
+            await self.redis.set(cache_key, orjson.dumps(films), ex=3600)  # Кэш на 1 час
+            logger.info("Популярные фильмы успешно получены. Количество: %d", len(films))
+            return films
+        except Exception as e:
+            logger.error("Ошибка при получении популярных фильмов: %s", e)
             raise
 
     async def add_film(self, film_id: str, film_data: dict) -> None:
@@ -161,3 +265,14 @@ class FilmService:
             logger.debug("Фильм сохранён в кэше: %s", film_id)
         except Exception as e:
             logger.error("Ошибка при кэшировании фильма: %s", e)
+
+# get_film_service — это провайдер FilmService.
+# С помощью Depends он сообщает, что ему необходимы Redis и Elasticsearch
+# Для их получения вы ранее создали функции-провайдеры в модуле db
+# Используем lru_cache-декоратор, чтобы создать объект сервиса в едином экземпляре (синглтона)
+@lru_cache()
+def get_film_service(
+        redis: Redis = Depends(get_redis),
+        elastic: AsyncElasticsearch = Depends(get_elastic),
+) -> FilmService:
+    return FilmService(redis, elastic)
