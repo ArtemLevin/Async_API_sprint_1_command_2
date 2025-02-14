@@ -1,130 +1,75 @@
-import json
-import random
-import uuid
-import psycopg2
-import logging
-from pydantic import BaseModel, Field
-from typing import List
+import asyncio
+import orjson  # Используем orjson вместо json
 from faker import Faker
-from settings import settings  # Импортируем настройки из модуля settings
+from elasticsearch import AsyncElasticsearch
+from redis.asyncio import Redis
+from film_service import FilmService
 
-# Инициализация Faker
+# Инициализация клиентов Elasticsearch и Redis
+elastic = AsyncElasticsearch(hosts=["http://localhost:9200"])
+redis = Redis(host="localhost", port=6379, decode_responses=True)
+
+# Инициализация Faker для генерации фейковых данных
 fake = Faker()
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+
+async def generate_fake_films(n: int):
+    """
+    Генерация фейковых данных о фильмах.
+
+    :param n: Количество фильмов для генерации.
+    :return: Список словарей с данными о фильмах.
+    """
+    films = []
+    for _ in range(n):
+        film = {
+            "id": fake.uuid4(),  # Уникальный ID фильма
+            "title": fake.sentence(nb_words=3),  # Название фильма, например, "Dark Horizon"
+            "description": fake.text(max_nb_chars=200),  # Описание фильма
+            "genres": [fake.word() for _ in range(2)],  # Список жанров
+            "actors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(3)],  # Список актёров
+            "rating": round(fake.random.uniform(1, 10), 1),  # Рейтинг фильма (от 1 до 10)
+            "release_year": fake.year(),  # Год выпуска фильма
+        }
+        films.append(film)
+    return films
 
 
-# Модели данных
-class Genre(BaseModel):
-    id: str
-    name: str
+async def populate_films(service: FilmService, num_films: int, batch_size: int = 1000):
+    """
+    Заполнить Elasticsearch и Redis фейковыми фильмами через FilmService.
+
+    :param service: Экземпляр FilmService для записи фильмов.
+    :param num_films: Общее количество фильмов для генерации.
+    :param batch_size: Количество фильмов в одном батче.
+    """
+    for i in range(0, num_films, batch_size):
+        print(f"Генерация фильмов {i + 1} - {min(i + batch_size, num_films)}")
+
+        # Генерация фейковых данных
+        films = await generate_fake_films(batch_size)
+
+        # Добавляем фильмы через FilmService
+        for film in films:
+            # Преобразуем данные в JSON с использованием ORJSON
+            film_json = orjson.dumps(film).decode("utf-8")  # ORJSON возвращает bytes, поэтому декодируем в строку
+            await service.add_film(film_id=film["id"], film_data=orjson.loads(film_json))
+
+        print(f"Батч {i + 1} - {min(i + batch_size, num_films)} завершён.")
+
+    print(f"Все {num_films} фильмов успешно загружены в Elasticsearch и Redis!")
 
 
-class Person(BaseModel):
-    id: str
-    name: str
+async def main():
+    # Инициализация FilmService
+    film_service = FilmService(redis=redis, elastic=elastic)
 
+    # Общее количество фильмов
+    num_films = 200_000
 
-class Movie(BaseModel):
-    id: str
-    imdb_rating: float = Field(ge=1.0, le=10.0)  # Рейтинг от 1.0 до 10.0
-    genres: List[Genre]
-    title: str
-    description: str
-    directors: List[Person]
-    actors: List[Person]
-    writers: List[Person]
-
-
-# Функции для генерации данных
-def generate_genres() -> List[dict]:
-    """Генерирует список жанров в формате JSON."""
-    genres = [
-        {"id": str(uuid.uuid4()), "name": "Drama"},
-        {"id": str(uuid.uuid4()), "name": "Comedy"},
-        {"id": str(uuid.uuid4()), "name": "Action"},
-        {"id": str(uuid.uuid4()), "name": "Horror"},
-        {"id": str(uuid.uuid4()), "name": "Thriller"},
-        {"id": str(uuid.uuid4()), "name": "Sci-Fi"},
-    ]
-    return random.sample(genres, random.randint(1, 3))
-
-
-def generate_people(role: str, count: int) -> List[dict]:
-    """Генерирует список людей (режиссёров, актёров или сценаристов) в формате JSON."""
-    return [{"id": str(uuid.uuid4()), "name": fake.name()} for _ in range(count)]
-
-
-def generate_movie() -> dict:
-    """Генерирует данные одного фильма."""
-    movie_data = {
-        "id": str(uuid.uuid4()),
-        "imdb_rating": round(random.uniform(1.0, 10.0), 1),
-        "genres": generate_genres(),
-        "title": fake.sentence(nb_words=3),
-        "description": fake.text(max_nb_chars=200),
-        "directors": generate_people("director", random.randint(1, 2)),
-        "actors": generate_people("actor", random.randint(2, 5)),
-        "writers": generate_people("writer", random.randint(1, 3)),
-    }
-    # Валидация
-    movie = Movie(**movie_data)
-    return movie.model_dump()
-
-
-# Заполнение базы данных
-def insert_movies_to_db(movie_count: int):
-    """Вставляет сгенерированные данные фильмов в базу данных."""
-    try:
-        # Подключение к PostgreSQL
-        conn = psycopg2.connect(
-            dbname=settings.postgres_name,
-            user=settings.postgres_user,
-            password=settings.postgres_password,
-            host=settings.postgres_host,
-            port=settings.postgres_port,
-        )
-        cursor = conn.cursor()
-
-        # SQL-запрос для вставки данных
-        insert_query = """
-        INSERT INTO movies (id, imdb_rating, genres, title, description, directors, actors, writers)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
-        """
-
-        # Генерация и вставка данных
-        for _ in range(movie_count):
-            movie = generate_movie()
-            cursor.execute(
-                insert_query,
-                (
-                    movie["id"],
-                    movie["imdb_rating"],
-                    json.dumps(movie["genres"]),  # Преобразование списка в JSON
-                    movie["title"],
-                    movie["description"],
-                    json.dumps(movie["directors"]),  # Преобразование списка в JSON
-                    json.dumps(movie["actors"]),  # Преобразование списка в JSON
-                    json.dumps(movie["writers"]),  # Преобразование списка в JSON
-                ),
-            )
-        conn.commit()
-        logger.info(f"{movie_count} фильмов успешно добавлено в базу данных.")
-    except Exception as e:
-        logger.error(f"Ошибка при вставке данных: {e}")
-    finally:
-        cursor.close()
-        conn.close()
+    # Заполняем Elasticsearch и Redis
+    await populate_films(film_service, num_films=num_films, batch_size=1000)
 
 
 if __name__ == "__main__":
-    # Укажите количество фильмов для генерации
-    NUMBER_OF_MOVIES = 50
-    logger.info(f"Начало генерации и записи {NUMBER_OF_MOVIES} фильмов в базу данных.")
-    insert_movies_to_db(NUMBER_OF_MOVIES)
-    logger.info("Процесс завершен.")
+    asyncio.run(main())
