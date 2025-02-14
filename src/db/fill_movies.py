@@ -1,25 +1,28 @@
 import asyncio
+import logging
+from typing import List, Dict
 import orjson  # Используем orjson вместо json
 from faker import Faker
-from elasticsearch import AsyncElasticsearch
-from redis.asyncio import Redis
-from film_service import FilmService
+from src.db.elastic import get_elastic
+from src.db.redis import get_redis
+from src.services.film import FilmService
 
-# Инициализация клиентов Elasticsearch и Redis
-elastic = AsyncElasticsearch(hosts=["http://localhost:9200"])
-redis = Redis(host="localhost", port=6379, decode_responses=True)
+# Настраиваем логгер
+logging.basicConfig(level=logging.INFO)  # Устанавливаем уровень логирования
+logger = logging.getLogger(__name__)
 
 # Инициализация Faker для генерации фейковых данных
 fake = Faker()
 
 
-async def generate_fake_films(n: int):
+async def generate_fake_films(n: int) -> List[Dict[str, str]]:
     """
     Генерация фейковых данных о фильмах.
 
     :param n: Количество фильмов для генерации.
     :return: Список словарей с данными о фильмах.
     """
+    logger.info("Начало генерации %d фейковых фильмов.", n)
     films = []
     for _ in range(n):
         film = {
@@ -32,10 +35,11 @@ async def generate_fake_films(n: int):
             "release_year": fake.year(),  # Год выпуска фильма
         }
         films.append(film)
+    logger.info("Генерация завершена. Сгенерировано %d фильмов.", n)
     return films
 
 
-async def populate_films(service: FilmService, num_films: int, batch_size: int = 1000):
+async def populate_films(service: FilmService, num_films: int, batch_size: int = 1000) -> None:
     """
     Заполнить Elasticsearch и Redis фейковыми фильмами через FilmService.
 
@@ -43,33 +47,60 @@ async def populate_films(service: FilmService, num_films: int, batch_size: int =
     :param num_films: Общее количество фильмов для генерации.
     :param batch_size: Количество фильмов в одном батче.
     """
+    logger.info("Начало заполнения Elasticsearch и Redis. Всего фильмов: %d, размер батча: %d", num_films, batch_size)
+
     for i in range(0, num_films, batch_size):
-        print(f"Генерация фильмов {i + 1} - {min(i + batch_size, num_films)}")
+        batch_start = i + 1
+        batch_end = min(i + batch_size, num_films)
+        logger.info("Генерация фильмов для батча %d - %d...", batch_start, batch_end)
 
         # Генерация фейковых данных
         films = await generate_fake_films(batch_size)
 
         # Добавляем фильмы через FilmService
-        for film in films:
-            # Преобразуем данные в JSON с использованием ORJSON
-            film_json = orjson.dumps(film).decode("utf-8")  # ORJSON возвращает bytes, поэтому декодируем в строку
-            await service.add_film(film_id=film["id"], film_data=orjson.loads(film_json))
+        try:
+            for film in films:
+                # Преобразуем данные в JSON с использованием ORJSON
+                # ORJSON возвращает bytes, поэтому декодируем в строку
+                film_json = orjson.dumps(film).decode("utf-8")
+                await service.add_film(film_id=film["id"], film_data=orjson.loads(film_json))
+        except Exception as e:
+            logger.error("Ошибка при добавлении фильмов в Elasticsearch/Redis: %s", e)
+            raise
 
-        print(f"Батч {i + 1} - {min(i + batch_size, num_films)} завершён.")
+        logger.info("Батч %d - %d завершён.", batch_start, batch_end)
 
-    print(f"Все {num_films} фильмов успешно загружены в Elasticsearch и Redis!")
+    logger.info("Все %d фильмов успешно загружены в Elasticsearch и Redis!", num_films)
 
 
-async def main():
-    # Инициализация FilmService
-    film_service = FilmService(redis=redis, elastic=elastic)
+async def main() -> None:
+    """
+    Основная функция для запуска заполнения Elasticsearch и Redis.
+    """
+    logger.info("Инициализация клиентов Redis и Elasticsearch...")
+    redis_client = await get_redis()  # Получаем экземпляр Redis
+    elastic_client = await get_elastic()  # Получаем экземпляр Elasticsearch
+
+    film_service = FilmService(redis=redis_client, elastic=elastic_client)
 
     # Общее количество фильмов
     num_films = 200_000
+    batch_size = 1000
 
     # Заполняем Elasticsearch и Redis
-    await populate_films(film_service, num_films=num_films, batch_size=1000)
+    try:
+        await populate_films(film_service, num_films=num_films, batch_size=batch_size)
+        logger.info("Фильмы успешно добавлены!")
+    except Exception as e:
+        logger.error("Произошла ошибка при добавлении фильмов: %s", e)
+    finally:
+        await redis_client.close()
+        await elastic_client.close()
+        logger.info("Соединения с Redis и Elasticsearch закрыты.")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.critical("Непредвиденная ошибка в программе: %s", e)
