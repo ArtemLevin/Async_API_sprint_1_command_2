@@ -23,7 +23,6 @@ env.bak/
 
 # Исключения для Docker
 *.log
-docker-compose*.yml
 *.pid
 *.sock
 .dockerignore
