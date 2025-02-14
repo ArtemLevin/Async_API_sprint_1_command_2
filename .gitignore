@@ -22,7 +22,6 @@ env.bak/
 *.env  # Файлы окружения
 
 # Исключения для Docker
-docker-compose.override.yml
 *.log
 docker-compose*.yml
 *.pid
