@@ -31,7 +31,7 @@ async def generate_fake_films(n: int) -> List[Dict[str, str]]:
             "description": fake.text(max_nb_chars=200),  # Описание фильма
             "genres": [fake.word() for _ in range(2)],  # Список жанров
             "actors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(3)],  # Список актёров
-            "rating": round(fake.random.uniform(1, 10), 1),  # Рейтинг фильма (от 1 до 10)
+            "imdb_rating": round(fake.random.uniform(1, 10), 1),  # Рейтинг фильма (от 1 до 10)
             "release_year": fake.year(),  # Год выпуска фильма
         }
         films.append(film)

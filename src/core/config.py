@@ -2,7 +2,7 @@ import os
 from logging import config as logging_config
 from decouple import config
 
-from core.logger import LOGGING
+from logger import LOGGING
 
 # Применяем настройки логирования
 logging_config.dictConfig(LOGGING)
