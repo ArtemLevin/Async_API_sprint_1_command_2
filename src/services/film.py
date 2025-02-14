@@ -1,5 +1,6 @@
 import orjson
 import logging
+from typing import Annotated
 from elasticsearch import AsyncElasticsearch, helpers
 from redis.asyncio import Redis
 import asyncio
@@ -269,7 +270,18 @@ class FilmService:
 
 @lru_cache()
 def get_film_service(
-        redis: Redis = Depends(get_redis),
-        elastic: AsyncElasticsearch = Depends(get_elastic),
+    redis: Annotated[Redis, Depends(get_redis)],
+    elastic: Annotated[AsyncElasticsearch, Depends(get_elastic)]
 ) -> FilmService:
+    """
+    Провайдер для получения экземпляра FilmService.
+
+    Функция создаёт синглтон экземпляр FilmService, используя Redis и Elasticsearch,
+    которые передаются через Depends (зависимости FastAPI).
+
+    :param redis: Экземпляр клиента Redis, предоставленный через Depends.
+    :param elastic: Экземпляр клиента Elasticsearch, предоставленный через Depends.
+    :return: Экземпляр FilmService, который используется для работы с фильмами.
+    """
+    logger.info("Создаётся экземпляр FilmService с использованием Redis и Elasticsearch.")
     return FilmService(redis, elastic)
