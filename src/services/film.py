@@ -266,10 +266,7 @@ class FilmService:
         except Exception as e:
             logger.error("Ошибка при кэшировании фильма: %s", e)
 
-# get_film_service — это провайдер FilmService.
-# С помощью Depends он сообщает, что ему необходимы Redis и Elasticsearch
-# Для их получения вы ранее создали функции-провайдеры в модуле db
-# Используем lru_cache-декоратор, чтобы создать объект сервиса в едином экземпляре (синглтона)
+
 @lru_cache()
 def get_film_service(
         redis: Redis = Depends(get_redis),
