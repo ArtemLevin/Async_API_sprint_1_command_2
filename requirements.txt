@@ -4,3 +4,4 @@ redis==5.0.4
 orjson==3.8.12
 python-decouple==3.8
 faker==19.2.0
+tenacity

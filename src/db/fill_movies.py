@@ -1,8 +1,12 @@
+from decimal import Decimal
 import asyncio
 import logging
 from typing import List, Dict
 import orjson  # Используем orjson вместо json
 from faker import Faker
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from redis.exceptions import RedisError
+from elasticsearch import ElasticsearchException
 from src.db.elastic import get_elastic
 from src.db.redis import get_redis
 from src.services.film import FilmService
@@ -15,6 +19,11 @@ logger = logging.getLogger(__name__)
 fake = Faker()
 
 
+@retry(
+    stop=stop_after_attempt(3),  # Максимум 3 попытки
+    wait=wait_exponential(multiplier=1, min=1, max=10),  # Экспоненциальная задержка между попытками
+    retry=retry_if_exception_type(Exception),  # Повторять при любых исключениях
+)
 async def generate_fake_films(n: int) -> List[Dict[str, str]]:
     """
     Генерация фейковых данных о фильмах.
@@ -27,11 +36,13 @@ async def generate_fake_films(n: int) -> List[Dict[str, str]]:
     for _ in range(n):
         film = {
             "id": fake.uuid4(),  # Уникальный ID фильма
-            "title": fake.sentence(nb_words=3),  # Название фильма, например, "Dark Horizon"
+            "title": fake.sentence(nb_words=3),  # Название фильма
             "description": fake.text(max_nb_chars=200),  # Описание фильма
             "genres": [fake.word() for _ in range(2)],  # Список жанров
             "actors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(3)],  # Список актёров
-            "imdb_rating": round(fake.random.uniform(1, 10), 1),  # Рейтинг фильма (от 1 до 10)
+            "writers": [f"{fake.first_name()} {fake.last_name()}" for _ in range(2)],  # Список сценаристов
+            "directors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(1)],  # Список режиссёров
+            "imdb_rating": Decimal(f"{fake.random.uniform(1, 10):.1f}"),  # Рейтинг фильма (от 1 до 10)
             "release_year": fake.year(),  # Год выпуска фильма
         }
         films.append(film)
@@ -39,6 +50,11 @@ async def generate_fake_films(n: int) -> List[Dict[str, str]]:
     return films
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type((RedisError, ElasticsearchException)),
+)
 async def populate_films(service: FilmService, num_films: int, batch_size: int = 1000) -> None:
     """
     Заполнить Elasticsearch и Redis фейковыми фильмами через FilmService.
@@ -63,7 +79,8 @@ async def populate_films(service: FilmService, num_films: int, batch_size: int =
                 # Преобразуем данные в JSON с использованием ORJSON
                 # ORJSON возвращает bytes, поэтому декодируем в строку
                 film_json = orjson.dumps(film).decode("utf-8")
-                await service.add_film(film_id=film["id"], film_data=orjson.loads(film_json))
+                # Добавляем фильм с повторными попытками
+                await add_film_with_retry(service, film["id"], orjson.loads(film_json))
         except Exception as e:
             logger.error("Ошибка при добавлении фильмов в Elasticsearch/Redis: %s", e)
             raise
@@ -73,6 +90,27 @@ async def populate_films(service: FilmService, num_films: int, batch_size: int =
     logger.info("Все %d фильмов успешно загружены в Elasticsearch и Redis!", num_films)
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type((RedisError, ElasticsearchException)),
+)
+async def add_film_with_retry(service: FilmService, film_id: str, film_data: Dict) -> None:
+    """
+    Добавить фильм в Elasticsearch и Redis с использованием retry.
+
+    :param service: Экземпляр FilmService.
+    :param film_id: ID фильма.
+    :param film_data: Данные фильма.
+    """
+    await service.add_film(film_id, film_data)
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=5),
+    retry=retry_if_exception_type((RedisError, ElasticsearchException)),
+)
 async def main() -> None:
     """
     Основная функция для запуска заполнения Elasticsearch и Redis.
