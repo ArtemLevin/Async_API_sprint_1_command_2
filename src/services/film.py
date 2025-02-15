@@ -5,11 +5,11 @@ from elasticsearch import AsyncElasticsearch, helpers
 from redis.asyncio import Redis
 import asyncio
 
-
 from src.db.elastic import get_elastic
 from src.db.redis import get_redis
 
 logger = logging.getLogger(__name__)
+
 
 class FilmService:
     """
@@ -27,6 +27,30 @@ class FilmService:
         """
         self.redis = redis
         self.elastic = elastic
+
+    async def _cache_film(self, film_id: str, film_data: dict) -> None:
+        """
+        Вспомогательный метод для кэширования фильма в Redis.
+        """
+        try:
+            await self.redis.set(f"film:{film_id}", orjson.dumps(film_data), ex=3600)
+            logger.debug("Фильм сохранён в кэше: %s", film_id)
+        except Exception as e:
+            logger.error("Ошибка при кэшировании фильма: %s", e)
+
+    async def _get_film_from_elastic(self, film_id: str) -> dict:
+        """
+        Вспомогательный метод для получения фильма из Elasticsearch.
+        """
+        try:
+            doc = await self.elastic.get(index="films", id=film_id, ignore=[404])
+            if not doc.get("found"):
+                logger.warning("Фильм не найден в Elasticsearch: %s", film_id)
+                return None
+            return doc["_source"]
+        except Exception as e:
+            logger.error("Ошибка при запросе к Elasticsearch: %s", e)
+            raise
 
     async def get_film_by_id(self, film_id: str) -> dict:
         """
@@ -50,7 +74,8 @@ class FilmService:
         asyncio.create_task(self._cache_film(film_id, film))  # Кэшируем асинхронно
         return film
 
-    async def get_films_by_genre(self, sort: str = "-imdb_rating", genre: str = None, limit: int = 10, offset: int = 0) -> list:
+    async def get_films_by_genre(self, sort: str = "-imdb_rating", genre: str = None, limit: int = 10,
+                                 offset: int = 0) -> list:
         """
         Получить список фильмов с поддержкой сортировки и фильтрации по жанру.
 
@@ -243,35 +268,11 @@ class FilmService:
             logger.error("Ошибка при массовом добавлении фильмов: %s", e)
             raise
 
-    async def _get_film_from_elastic(self, film_id: str) -> dict:
-        """
-        Вспомогательный метод для получения фильма из Elasticsearch.
-        """
-        try:
-            doc = await self.elastic.get(index="films", id=film_id, ignore=[404])
-            if not doc.get("found"):
-                logger.warning("Фильм не найден в Elasticsearch: %s", film_id)
-                return None
-            return doc["_source"]
-        except Exception as e:
-            logger.error("Ошибка при запросе к Elasticsearch: %s", e)
-            raise
-
-    async def _cache_film(self, film_id: str, film_data: dict) -> None:
-        """
-        Вспомогательный метод для кэширования фильма в Redis.
-        """
-        try:
-            await self.redis.set(f"film:{film_id}", orjson.dumps(film_data), ex=3600)
-            logger.debug("Фильм сохранён в кэше: %s", film_id)
-        except Exception as e:
-            logger.error("Ошибка при кэшировании фильма: %s", e)
-
 
 @lru_cache()
 def get_film_service(
-    redis: Annotated[Redis, Depends(get_redis)],
-    elastic: Annotated[AsyncElasticsearch, Depends(get_elastic)]
+        redis: Annotated[Redis, Depends(get_redis)],
+        elastic: Annotated[AsyncElasticsearch, Depends(get_elastic)]
 ) -> FilmService:
     """
     Провайдер для получения экземпляра FilmService.
