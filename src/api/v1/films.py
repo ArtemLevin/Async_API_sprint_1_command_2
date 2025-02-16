@@ -46,7 +46,7 @@ async def film_details(
     logger.info(f"Фильм с ID {film_id} успешно найден: {film}")
 
     # Преобразуем данные из бизнес-логики в модель ответа
-    return Film(id=film["id"], title=film["title"])
+    return Film(id=film["id"], title=film["title"], imdb_rating=film["imdb_rating"])
 
 @router.get("/popular", response_model=List[Film])
 async def get_popular_films(

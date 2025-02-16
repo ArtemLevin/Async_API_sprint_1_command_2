@@ -1,14 +1,30 @@
+from decimal import Decimal
 from typing import List, Optional
 from pydantic import BaseModel
 
 
 class Film(BaseModel):
     """
-    Модель для представления информации о фильме.
+    Модель для представления краткой информации о фильме.
     """
     id: str
     title: str
+    imdb_rating: Decimal
 
+
+class FilmFullDescription(BaseModel):
+    """
+    Модель для представления полной информации о фильме.
+    """
+    id: str
+    title: str
+    description: str
+    genres: List[str]
+    actors: List[str]
+    writers: List[str]
+    directors: List[str]
+    imdb_rating: Decimal
+    release_year: int
 
 class Genre(BaseModel):
     """
