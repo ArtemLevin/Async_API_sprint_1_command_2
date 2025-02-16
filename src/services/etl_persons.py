@@ -3,14 +3,13 @@ from elasticsearch.helpers import async_bulk
 from typing import List, AsyncIterator
 import logging
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from logging.config import dictConfig
+from core.logger import LOGGING
 
+dictConfig(LOGGING)
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+
 
 class ETLPersonService:
     def __init__(self, elastic: AsyncElasticsearch):
@@ -29,7 +28,7 @@ class ETLPersonService:
     )
     async def create_person_index(self, person_index: str) -> None:
         """
-        Создаёт индекс для персонс заданной схемой, если он ещё не существует.
+        Создаёт индекс для персон с заданной схемой, если он ещё не существует.
 
         :param person_index: Имя индекса для хранения данных о персонах.
         """
@@ -60,7 +59,7 @@ class ETLPersonService:
     )
     async def extract_persons(self, films_index: str) -> AsyncIterator[dict]:
         """
-        Извлекает данные о персонажах из индекса фильмов.
+        Извлекает данные о персон из индекса фильмов.
 
         :param films_index: Имя индекса фильмов, из которого извлекаются данные.
         :yield: Генератор словарей с информацией о персонах.
