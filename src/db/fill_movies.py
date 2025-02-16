@@ -73,16 +73,16 @@ async def populate_films(service: FilmService, num_films: int, batch_size: int =
         # Генерация фейковых данных
         films = await generate_fake_films(batch_size)
 
-        # Добавляем фильмы через FilmService
         try:
-            for film in films:
-                # Преобразуем данные в JSON с использованием ORJSON
-                # ORJSON возвращает bytes, поэтому декодируем в строку
-                film_json = orjson.dumps(film).decode("utf-8")
-                # Добавляем фильм с повторными попытками
-                await add_film_with_retry(service, film["id"], orjson.loads(film_json))
-        except Exception as e:
-            logger.error("Ошибка при добавлении фильмов в Elasticsearch/Redis: %s", e)
+            # Параллельная обработка фильмов
+            await asyncio.gather(
+                *[
+                    add_film_with_retry(service, film["id"], film)
+                    for film in films
+                ]
+            )
+        except Exception:
+            logger.exception("Ошибка при добавлении фильмов в Elasticsearch/Redis")
             raise
 
         logger.info("Батч %d - %d завершён.", batch_start, batch_end)
