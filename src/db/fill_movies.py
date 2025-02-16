@@ -24,31 +24,21 @@ fake = Faker()
     wait=wait_exponential(multiplier=1, min=1, max=10),  # Экспоненциальная задержка между попытками
     retry=retry_if_exception_type(Exception),  # Повторять при любых исключениях
 )
-async def generate_fake_films(n: int) -> List[Dict[str, str]]:
-    """
-    Генерация фейковых данных о фильмах.
+async def generate_fake_film() -> Dict[str, str]:
+    return {
+        "id": fake.uuid4(),
+        "title": fake.sentence(nb_words=3),
+        "description": fake.text(max_nb_chars=200),
+        "genres": [fake.word() for _ in range(2)],
+        "actors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(3)],
+        "writers": [f"{fake.first_name()} {fake.last_name()}" for _ in range(2)],
+        "directors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(1)],
+        "imdb_rating": Decimal(f"{fake.random.uniform(1, 10):.1f}"),
+        "release_year": fake.year(),
+    }
 
-    :param n: Количество фильмов для генерации.
-    :return: Список словарей с данными о фильмах.
-    """
-    logger.info("Начало генерации %d фейковых фильмов.", n)
-    films = []
-    for _ in range(n):
-        film = {
-            "id": fake.uuid4(),  # Уникальный ID фильма
-            "title": fake.sentence(nb_words=3),  # Название фильма
-            "description": fake.text(max_nb_chars=200),  # Описание фильма
-            "genres": [fake.word() for _ in range(2)],  # Список жанров
-            "actors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(3)],  # Список актёров
-            "writers": [f"{fake.first_name()} {fake.last_name()}" for _ in range(2)],  # Список сценаристов
-            "directors": [f"{fake.first_name()} {fake.last_name()}" for _ in range(1)],  # Список режиссёров
-            "imdb_rating": Decimal(f"{fake.random.uniform(1, 10):.1f}"),  # Рейтинг фильма (от 1 до 10)
-            "release_year": fake.year(),  # Год выпуска фильма
-        }
-        films.append(film)
-    logger.info("Генерация завершена. Сгенерировано %d фильмов.", n)
-    return films
-
+async def generate_fake_films_async(n: int) -> List[Dict[str, str]]:
+    return await asyncio.gather(*(generate_fake_film() for _ in range(n)))
 
 @retry(
     stop=stop_after_attempt(3),
@@ -71,7 +61,7 @@ async def populate_films(service: FilmService, num_films: int, batch_size: int =
         logger.info("Генерация фильмов для батча %d - %d...", batch_start, batch_end)
 
         # Генерация фейковых данных
-        films = await generate_fake_films(batch_size)
+        films = await generate_fake_films_async(batch_size)
 
         try:
             # Параллельная обработка фильмов
