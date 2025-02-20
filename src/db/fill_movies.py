@@ -2,7 +2,6 @@ from decimal import Decimal
 import asyncio
 import logging
 from typing import List, Dict
-import orjson  # Используем orjson вместо json
 from faker import Faker
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from redis.exceptions import RedisError
@@ -11,8 +10,7 @@ from src.db.elastic import get_elastic
 from src.db.redis import get_redis
 from src.services.film import FilmService
 
-# Настраиваем логгер
-logging.basicConfig(level=logging.INFO)  # Устанавливаем уровень логирования
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Инициализация Faker для генерации фейковых данных

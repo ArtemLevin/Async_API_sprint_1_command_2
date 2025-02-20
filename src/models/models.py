@@ -1,6 +1,6 @@
 from decimal import Decimal
-from typing import List, Optional
-from pydantic import BaseModel
+from typing import List
+from pydantic import BaseModel, Field, UUID4
 
 
 class Film(BaseModel):
@@ -27,25 +27,12 @@ class FilmFullDescription(BaseModel):
     release_year: int
 
 class Genre(BaseModel):
-    """
-    Модель для представления жанра.
-    """
-    id: str  # Уникальный идентификатор жанра
-    name: str  # Имя жанра
-
-
-class FilmRole(BaseModel):
-    """
-    Модель для представления участия в фильме.
-    """
-    id: str  # Уникальный идентификатор фильма
-    roles: List[str]  # Роли в фильме (например, "actor", "director")
+    uuid: UUID4 = Field(..., description="Уникальный идентификатор жанра")
+    name: str = Field(..., min_length=1, max_length=50, description="Название жанра")
+    description: str | None = Field(None, description="Описание жанра")
 
 
 class Person(BaseModel):
-    """
-    Модель для представления информации о персоне.
-    """
-    id: str  # Уникальный идентификатор персоны
-    full_name: str  # Полное имя персоны
-    films: Optional[List[FilmRole]] = []  # Список фильмов, в которых участвовала персона
+    uuid: str
+    full_name: str
+    films: List[Film] = Field(default_factory=list)

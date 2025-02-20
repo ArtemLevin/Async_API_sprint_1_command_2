@@ -1,7 +1,10 @@
+from functools import lru_cache
+
 import orjson
 import logging
 from typing import Annotated
 from elasticsearch import AsyncElasticsearch, helpers
+from fastapi import Depends
 from redis.asyncio import Redis
 import asyncio
 
