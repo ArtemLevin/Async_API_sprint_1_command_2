@@ -1,11 +1,13 @@
 from typing import Optional
 from elasticsearch import AsyncElasticsearch
 from utils.elastic_service import ElasticService
+from core.config import ELASTIC_HOST, ELASTIC_PORT, ELASTIC_SCHEMA
 
 es: Optional[AsyncElasticsearch] = None
 
-async def get_elastic() -> AsyncElasticsearch:
+async def get_elastic() -> ElasticService:
     global es
-    if not es:  # Создаём соединение, если его ещё нет
-        es = AsyncElasticsearch(hosts=["http://localhost:9200"])
+    if es:
+        await es.close()  # Закрываем старое соединение
+    es = AsyncElasticsearch(hosts=[f"{ELASTIC_SCHEMA}{ELASTIC_HOST}:{ELASTIC_PORT}"])
     return ElasticService(es)
