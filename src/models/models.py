@@ -11,12 +11,6 @@ class Genre(BaseModel):
     description: str | None = Field(None, description="Описание жанра")
 
 
-class Person(BaseModel):
-    uuid: str
-    full_name: str
-    films: List[Film] = Field(default_factory=list)
-
-
 class GenreBase(BaseModel):
     """
     Модель для представления жанра.
@@ -45,3 +39,9 @@ class Film(BaseModel):
     writers: list[PersonBase]
     directors: list[PersonBase]
     imdb_rating: Decimal
+
+
+class Person(BaseModel):
+    uuid: str
+    full_name: str
+    films: List[Film] = Field(default_factory=list)

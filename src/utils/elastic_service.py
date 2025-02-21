@@ -1,5 +1,5 @@
 from elasticsearch import AsyncElasticsearch
-from decorators import with_retry
+from utils.decorators import with_retry
 
 
 class ElasticService:

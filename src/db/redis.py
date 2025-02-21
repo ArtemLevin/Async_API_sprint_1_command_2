@@ -1,6 +1,6 @@
 from typing import Optional
 from redis.asyncio import Redis
-from src.utils.cache_service import CacheService
+from utils.cache_service import CacheService
 
 redis: Optional[Redis] = None
 

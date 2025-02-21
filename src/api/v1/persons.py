@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from uuid import UUID
 
-from src.db.elastic import get_elastic
-from src.db.redis import get_redis
-from src.services.person_service import PersonService
-from src.models.models import Person
+from db.elastic import get_elastic
+from db.redis import get_redis
+from services.person_service import PersonService
+from models.models import Person
 
 
 router = APIRouter()
