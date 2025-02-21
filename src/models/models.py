@@ -1,30 +1,9 @@
 from decimal import Decimal
 from typing import List
+from uuid import UUID
+
 from pydantic import BaseModel, Field, UUID4
 
-
-class Film(BaseModel):
-    """
-    Модель для представления краткой информации о фильме.
-    """
-    id: str
-    title: str
-    imdb_rating: Decimal
-
-
-class FilmFullDescription(BaseModel):
-    """
-    Модель для представления полной информации о фильме.
-    """
-    id: str
-    title: str
-    description: str
-    genres: List[str]
-    actors: List[str]
-    writers: List[str]
-    directors: List[str]
-    imdb_rating: Decimal
-    release_year: int
 
 class Genre(BaseModel):
     uuid: UUID4 = Field(..., description="Уникальный идентификатор жанра")
@@ -36,3 +15,33 @@ class Person(BaseModel):
     uuid: str
     full_name: str
     films: List[Film] = Field(default_factory=list)
+
+
+class GenreBase(BaseModel):
+    """
+    Модель для представления жанра.
+    """
+    id: UUID = Field(serialization_alias='uuid')  # Уникальный идентификатор жанра
+    name: str  # Имя жанра
+
+
+class PersonBase(BaseModel):
+    """
+    Базовая модель для представления информации о персоне.
+    """
+    id: UUID = Field(serialization_alias='uuid')  # Уникальный идентификатор персоны
+    full_name: str  # Полное имя персоны
+
+
+class Film(BaseModel):
+    """
+    Модель для представления информации о фильме.
+    """
+    id: UUID = Field(serialization_alias="uuid")
+    title: str
+    description: str
+    genre: list[GenreBase]
+    actors: list[PersonBase]
+    writers: list[PersonBase]
+    directors: list[PersonBase]
+    imdb_rating: Decimal
