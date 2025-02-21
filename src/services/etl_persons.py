@@ -5,7 +5,7 @@ from typing import List, AsyncIterator
 import logging
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from logging.config import dictConfig
-from src.core.logger import LOGGING
+from core.logger import LOGGING
 
 dictConfig(LOGGING)
 

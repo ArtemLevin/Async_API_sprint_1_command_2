@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from http import HTTPStatus
 from elasticsearch import AsyncElasticsearch
-from src.services.etl_genres import ETLService
-from src.db.elastic import get_elastic
+from services.etl_genres import ETLService
+from db.elastic import get_elastic
 
 router = APIRouter()
 

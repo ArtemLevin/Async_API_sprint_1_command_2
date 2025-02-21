@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from http import HTTPStatus
 from elasticsearch import AsyncElasticsearch
-from src.services.etl_persons import ETLPersonService
-from src.db.elastic import get_elastic
+from services.etl_persons import ETLPersonService
+from db.elastic import get_elastic
 import logging
 from typing import Dict
 

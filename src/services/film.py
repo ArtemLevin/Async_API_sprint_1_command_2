@@ -18,9 +18,9 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from src.db.elastic import get_elastic
-from src.db.redis import get_redis
-from src.models.models import Film
+from db.elastic import get_elastic
+from db.redis import get_redis
+from models.models import Film
 
 ELASTIC_INDEX = "films"
 FILM_CACHE_EXPIRE_IN_SECONDS = 300

@@ -1,6 +1,6 @@
 from typing import Optional
 from elasticsearch import AsyncElasticsearch
-from src.utils.elastic_service import ElasticService
+from utils.elastic_service import ElasticService
 
 es: Optional[AsyncElasticsearch] = None
 

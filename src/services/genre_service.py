@@ -2,8 +2,8 @@ import logging
 from uuid import UUID
 from typing import Optional, List, Dict, Any
 
-from src.services.base_service import BaseService
-from src.models.models import Genre
+from services.base_service import BaseService
+from models.models import Genre
 
 logger = logging.getLogger(__name__)
 

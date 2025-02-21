@@ -4,8 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from src.models.models import Film, Person
-from src.services.base_service import BaseService
+from models.models import Film, Person
+from services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 

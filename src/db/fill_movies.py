@@ -6,9 +6,9 @@ from faker import Faker
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from redis.exceptions import RedisError
 from elasticsearch import ElasticsearchException
-from src.db.elastic import get_elastic
-from src.db.redis import get_redis
-from src.services.film import FilmService
+from db.elastic import get_elastic
+from db.redis import get_redis
+from services.film import FilmService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
