@@ -4,32 +4,18 @@ from functools import lru_cache
 from typing import Annotated, Optional
 
 import orjson
-from elasticsearch import AsyncElasticsearch
-from elasticsearch import BadRequestError as ESBadRequestError
-from elasticsearch import ConnectionError as ESConnectionError
-from elasticsearch import ConnectionTimeout as ESConnectionTimeout
-from elasticsearch import NotFoundError
-from elasticsearch import TransportError as ESTransportError
-from elasticsearch import helpers
+from elasticsearch import AsyncElasticsearch, NotFoundError, helpers
 from fastapi import Depends
 from pydantic import ValidationError
 from redis.asyncio import Redis
-from redis.exceptions import ConnectionError as RedisConnectionError
-from redis.exceptions import RedisError
-from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from db.elastic import get_elastic
-from db.redis import get_redis
-from models.models import Film
-
-ELASTIC_INDEX = "films"
-FILM_CACHE_EXPIRE_IN_SECONDS = 300
-ELASTIC_EXCEPTIONS = (
-    ESConnectionError, ESConnectionTimeout, ESTransportError, ESBadRequestError
-)
-REDIS_EXCEPTIONS = (RedisConnectionError, RedisTimeoutError, RedisError)
-GET_FILM_BY_ID_EXCLUDE = {}
-GET_FILMS_EXCLUDE = {"description", "genre", "actors", "writers", "directors"}
+from src.core.config import (ELASTIC_EXCEPTIONS, ELASTIC_INDEX,
+                             FILM_CACHE_EXPIRE_IN_SECONDS,
+                             GET_FILM_BY_ID_EXCLUDE, GET_FILMS_EXCLUDE,
+                             REDIS_EXCEPTIONS)
+from src.db.elastic import get_elastic
+from src.db.redis import get_redis
+from src.models.models import Film
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +234,7 @@ class FilmService:
         # Сортировка
         sort_field = sort.lstrip("-")
         sort_order = "desc" if sort.startswith("-") else "asc"
-        sort = [{sort_field: sort_order}],
+        sort = [{sort_field: sort_order}]
 
         # Формируем тело запроса для Elasticsearch
         body = {
@@ -272,14 +258,14 @@ class FilmService:
             sort, genre, limit, offset, len(films)
         )
 
-        if len(films) == 0:
+        if not films:
             return None
 
         # Проверяем валидность полученных данных из Elasticsearch и формируем
         # словари с нужными ключами из объектов модели Film
         valid_films = self._validate_films(films, GET_FILMS_EXCLUDE)
 
-        if len(valid_films) == 0:
+        if not valid_films:
             logger.warning(
                 "По запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
                 "полученные фильмы из Elasticsearch не прошли валидацию",
@@ -347,14 +333,14 @@ class FilmService:
             query, limit, offset, len(films)
         )
 
-        if len(films) == 0:
+        if not films:
             return None
 
         # Проверяем валидность полученных данных из Elasticsearch и формируем
         # словари с нужными ключами из объектов модели Film
         valid_films = self._validate_films(films, GET_FILMS_EXCLUDE)
 
-        if len(valid_films) == 0:
+        if not valid_films:
             logger.warning(
                 "По запросу (query=%s, limit=%d, offset=%d) полученные фильмы "
                 "из Elasticsearch не прошли валидацию",
@@ -376,15 +362,22 @@ class FilmService:
         """
         logger.info("Добавление фильма. ID: %s", film_id)
 
-        # Используем asyncio.gather для параллельного добавления в Elasticsearch и Redis
+        # Используем asyncio.gather для параллельного добавления в
+        # Elasticsearch и Redis
         try:
             await asyncio.gather(
                 self.elastic.index(index="films", id=film_id, body=film_data),
-                self.redis.set(f"film:{film_id}", orjson.dumps(film_data), ex=3600)
+                self.redis.set(
+                    f"film:{film_id}",
+                    orjson.dumps(film_data),
+                    ex=FILM_CACHE_EXPIRE_IN_SECONDS
+                )
             )
             logger.info("Фильм добавлен: %s", film_id)
         except Exception as e:
-            logger.error("Ошибка при добавлении фильма. ID: %s, Ошибка: %s", film_id, e)
+            logger.error(
+                "Ошибка при добавлении фильма. ID: %s, Ошибка: %s", film_id, e
+            )
             raise
 
     async def delete_film(self, film_id: str) -> None:
@@ -393,7 +386,8 @@ class FilmService:
         """
         logger.info("Удаление фильма. ID: %s", film_id)
 
-        # Используем asyncio.gather для параллельного удаления из Elasticsearch и Redis
+        # Используем asyncio.gather для параллельного удаления из
+        # Elasticsearch и Redis
         try:
             await asyncio.gather(
                 self.elastic.delete(index="films", id=film_id, ignore=[404]),
@@ -401,7 +395,9 @@ class FilmService:
             )
             logger.info("Фильм удалён: %s", film_id)
         except Exception as e:
-            logger.error("Ошибка при удалении фильма. ID: %s, Ошибка: %s", film_id, e)
+            logger.error(
+                "Ошибка при удалении фильма. ID: %s, Ошибка: %s", film_id, e
+            )
             raise
 
     async def bulk_add_films(self, films: list[dict]) -> None:
@@ -423,7 +419,11 @@ class FilmService:
         # Кэшируем фильмы в Redis через Pipeline
         redis_pipeline = self.redis.pipeline()
         for film in films:
-            redis_pipeline.set(f"film:{film['id']}", orjson.dumps(film), ex=3600)
+            redis_pipeline.set(
+                f"film:{film['id']}",
+                orjson.dumps(film),
+                ex=FILM_CACHE_EXPIRE_IN_SECONDS
+            )
 
         # Выполняем массовые операции параллельно
         try:
@@ -445,12 +445,16 @@ def get_film_service(
     """
     Провайдер для получения экземпляра FilmService.
 
-    Функция создаёт синглтон экземпляр FilmService, используя Redis и Elasticsearch,
-    которые передаются через Depends (зависимости FastAPI).
+    Функция создаёт синглтон экземпляр FilmService, используя Redis и
+    Elasticsearch, которые передаются через Depends (зависимости FastAPI).
 
     :param redis: Экземпляр клиента Redis, предоставленный через Depends.
-    :param elastic: Экземпляр клиента Elasticsearch, предоставленный через Depends.
+    :param elastic: Экземпляр клиента Elasticsearch, предоставленный через
+    Depends.
     :return: Экземпляр FilmService, который используется для работы с фильмами.
     """
-    logger.info("Создаётся экземпляр FilmService с использованием Redis и Elasticsearch.")
+    logger.info(
+        "Создаётся экземпляр FilmService с использованием Redis и "
+        "Elasticsearch."
+    )
     return FilmService(redis, elastic)

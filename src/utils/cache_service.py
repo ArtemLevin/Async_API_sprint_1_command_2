@@ -1,6 +1,7 @@
 from typing import Optional
+
+from decorators import with_retry
 from redis.asyncio import Redis
-from utils.decorators import with_retry
 
 
 class CacheService:
