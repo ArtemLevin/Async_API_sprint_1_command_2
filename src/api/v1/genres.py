@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
 from uuid import UUID
 
-from services.genre_service import GenreService
-from models.models import Genre
-from db.elastic import get_elastic
-from db.redis import get_redis
+from fastapi import APIRouter, HTTPException
+
+from src.db.elastic import get_elastic
+from src.db.redis import get_redis
+from src.models.models import Genre
+from src.services.genre_service import GenreService
 
 router = APIRouter()
 

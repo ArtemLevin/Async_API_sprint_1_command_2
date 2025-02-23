@@ -1,13 +1,14 @@
 from typing import Optional
+
 from redis.asyncio import Redis
-from utils.cache_service import CacheService
-from core.config import REDIS_HOST, REDIS_PORT
+
+from src.utils.cache_service import CacheService
 
 redis: Optional[Redis] = None
 
-async def get_redis() -> CacheService:
+
+async def get_redis() -> Redis:
     global redis
-    if redis:
-        await redis.close()  # Закрываем старое соединение
-    redis = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    if not redis:  # Создаём соединение, если его ещё нет
+        redis = Redis(host="localhost", port=6379)
     return CacheService(redis)
