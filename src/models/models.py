@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class Genre(BaseModel):
-    uuid: UUID = Field(..., description="Уникальный идентификатор жанра")
+    id: UUID = Field(..., description="Уникальный идентификатор жанра")
     name: str = Field(
         ..., min_length=1, max_length=50, description="Название жанра"
     )
@@ -75,6 +75,6 @@ class Person(BaseModel):
     """
     Модель для представления информации о персоне.
     """
-    uuid: str
+    id: UUID = Field(..., description="Уникальный идентификатор персоны")
     full_name: str
     films: List[Film] = Field(default_factory=list)

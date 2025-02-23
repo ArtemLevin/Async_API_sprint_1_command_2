@@ -25,11 +25,11 @@ class PersonService(BaseService):
             source = response["_source"]
             films = [
                 Film(
-                    uuid=film["uuid"], roles=film.get("roles", [])
+                    id=film["uuid"], roles=film.get("roles", [])
                 ) for film in source.get("films", [])
             ]
             return Person(
-                uuid=source["uuid"], full_name=source["full_name"], films=films
+                id=source["uuid"], full_name=source["full_name"], films=films
             )
         except KeyError as e:
             logger.error(

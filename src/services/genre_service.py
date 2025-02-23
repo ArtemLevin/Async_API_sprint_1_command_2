@@ -28,7 +28,7 @@ class GenreService(BaseService):
         try:
             source = response["_source"]
             return Genre(
-                uuid=source["uuid"],
+                id=source["uuid"],
                 name=source["name"],
                 description=source.get("description")  # Описание может быть
                 # необязательным
