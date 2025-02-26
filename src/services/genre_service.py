@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from uuid import UUID
 
 from src.models.models import Genre
@@ -21,7 +21,7 @@ class GenreService(BaseService):
 
     def parse_elastic_response(
             self, response: Dict[str, Any]
-    ) -> Optional[Genre]:
+    ) -> Genre | None:
         """
         Парсинг ответа от Elasticsearch в объект Genre.
         """

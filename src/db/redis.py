@@ -1,10 +1,8 @@
-from typing import Optional
-
 from redis.asyncio import Redis
 
 from src.utils.cache_service import CacheService
 
-redis: Optional[Redis] = None
+redis: Redis | None = None
 
 
 async def get_redis() -> Redis:

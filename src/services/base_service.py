@@ -1,7 +1,7 @@
 # app/services/base_service.py
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from pydantic import BaseModel
 
@@ -23,10 +23,10 @@ class BaseService(ABC):
     @abstractmethod
     def parse_elastic_response(
             self, response: Dict[str, Any]
-    ) -> Optional[BaseModel]:
+    ) -> BaseModel | None:
         pass
 
-    async def get_by_uuid(self, unique_id: Any) -> Optional[BaseModel]:
+    async def get_by_uuid(self, unique_id: Any) -> BaseModel | None:
         """
         Получение объекта по UUID из кэша или Elasticsearch.
         """

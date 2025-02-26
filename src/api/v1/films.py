@@ -1,6 +1,5 @@
 import logging
 from http import HTTPStatus
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -57,7 +56,7 @@ async def search_films(
         description="Смещение для пагинации (неотрицательное число)",
     ),
     film_service: FilmService = Depends(get_film_service),
-) -> Optional[list[dict]]:
+) -> list[dict] | None:
     """
     Эндпоинт для получения фильмов с поддержкой сортировки по рейтингу,
     фильтрации по жанру и пагинацией.
@@ -86,7 +85,7 @@ async def search_films(
 
 @router.get("")
 async def get_films(
-        genre: Optional[UUID] = Query(
+        genre: UUID | None = Query(
             None, description="UUID жанра для фильтрации"
         ),
         sort: str = Query(
@@ -105,7 +104,7 @@ async def get_films(
             description="Смещение для пагинации (неотрицательное число)",
         ),
         film_service: FilmService = Depends(get_film_service),
-) -> Optional[list[dict]]:
+) -> list[dict] | None:
     """
     Эндпоинт для получения фильмов с поддержкой сортировки по рейтингу,
     фильтрации по жанру и пагинацией.
