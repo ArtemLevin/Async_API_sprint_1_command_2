@@ -1,5 +1,3 @@
-from typing import Optional
-
 from decorators import with_retry
 from redis.asyncio import Redis
 
@@ -10,7 +8,7 @@ class CacheService:
         self.cache_expire = cache_expire
 
     @with_retry()
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         return await self.redis_client.get(key)
 
     @with_retry()

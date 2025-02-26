@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from functools import lru_cache
-from typing import Annotated, Optional
+from typing import Annotated
 
 import orjson
 from elasticsearch import AsyncElasticsearch, NotFoundError, helpers
@@ -38,7 +38,7 @@ class FilmService:
     @staticmethod
     def _model_dump(
             film: Film, exclude: set | dict | None = None
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Вспомогательный метод для генерации словаря из объекта модели Film.
         """
@@ -49,7 +49,7 @@ class FilmService:
             logger.error("Ошибка при сериализации фильма %s: %s", film.id, e)
 
     @staticmethod
-    def _create_film_object(data: dict) -> Optional[Film]:
+    def _create_film_object(data: dict) -> Film | None:
         """Вспомогательный метод для создания объекта модели Film."""
         try:
             film = Film(**data)
@@ -66,7 +66,7 @@ class FilmService:
 
     def _validate_films(
             self, films: list[dict], exclude: set | dict | None = None
-    ) -> Optional[list[dict]]:
+    ) -> list[dict] | None:
         """
         Вспомогательный метод для валидации данных по фильмам и формирования
         списка словарей с требуемыми полями фильмов.
@@ -115,7 +115,7 @@ class FilmService:
         else:
             return orjson.loads(cache_data)
 
-    async def _get_film_from_elastic(self, film_id: str) -> Optional[dict]:
+    async def _get_film_from_elastic(self, film_id: str) -> dict | None:
         """
         Вспомогательный метод для получения фильма из Elasticsearch.
         """
@@ -137,7 +137,7 @@ class FilmService:
 
     async def _get_films_from_elastic(
             self, body: dict
-    ) -> Optional[list[dict]]:
+    ) -> list[dict] | None:
         """
         Вспомогательный метод для получения фильмов из Elasticsearch.
         """
@@ -150,7 +150,7 @@ class FilmService:
         else:
             return films["hits"]["hits"]
 
-    async def get_film_by_id(self, film_id: str) -> Optional[dict]:
+    async def get_film_by_id(self, film_id: str) -> dict | None:
         """
         Получить фильм по его ID.
         """
@@ -197,6 +197,7 @@ class FilmService:
             page_size: int = 10,
             page_number: int = 0,
     ) -> Optional[list[dict]]:
+
         """
         Получить список фильмов с поддержкой сортировки по рейтингу,
         фильтрации по жанру и пагинацией.
@@ -290,7 +291,7 @@ class FilmService:
 
     async def search_films(
             self, query: str, page_size: int = 10, page_number: int = 1
-    ) -> Optional[list[dict]]:
+    ) -> list[dict] | None:
         """
         Поиск фильмов по ключевым словам.
         """

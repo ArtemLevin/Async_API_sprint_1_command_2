@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ class PersonService(BaseService):
 
     def parse_elastic_response(
             self, response: Dict[str, Any]
-    ) -> Optional[BaseModel]:
+    ) -> BaseModel | None:
         try:
             source = response["_source"]
             films = [
