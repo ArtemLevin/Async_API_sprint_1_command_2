@@ -197,33 +197,28 @@ class FilmService:
             self,
             genre: str = None,
             sort: str = "-imdb_rating",
-            limit: int = 10,
-            offset: int = 0,
+            page_size: int = 10,
+            page_number: int = 0,
     ) -> Optional[list[dict]]:
         """
         Получить список фильмов с поддержкой сортировки по рейтингу,
         фильтрации по жанру и пагинацией.
-
-        :param genre: UUID жанра для фильтрации (пример: <comedy-uuid>).
-        :param sort: Поле для сортировки (пример: "-imdb_rating" для убывания).
-        :param limit: Количество фильмов в результате (по умолчанию 10).
-        :param offset: Смещение для пагинации (по умолчанию 0).
-        :return: Список фильмов, соответствующих критериям.
         """
         logger.info(
             "Запрос на получение фильмов: "
             "sort=%s, genre=%s, limit=%d, offset=%d",
-            sort, genre, limit, offset
+            sort, genre, page_size, page_number
         )
 
-        cache_key = f"films:{sort}:{genre}:{limit}:{offset}"  # Ключ для кеша
+        # Ключ для кеша
+        cache_key = f"films:{sort}:{genre}:{page_size}:{page_number}"
 
         # Проверяем наличие результата в кеше (Redis)
         if cached_films := await self._get_from_cache(cache_key):
             logger.debug(
                 "Фильмы по запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
                 "найдены в кеше.",
-                sort, genre, limit, offset
+                sort, genre, page_size, page_number
             )
             return cached_films
 
@@ -245,8 +240,8 @@ class FilmService:
                 },
             },
             "sort": sort,
-            "from": offset,
-            "size": limit
+            "from": page_number,
+            "size": page_size
         }
 
         # Выполняем запрос к Elasticsearch
@@ -255,7 +250,7 @@ class FilmService:
         logger.debug(
             "Фильмов по запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
             "найдено в Elasticsearch %d шт.",
-            sort, genre, limit, offset, len(films)
+            sort, genre, page_size, page_number, len(films)
         )
 
         if not films:
@@ -269,7 +264,7 @@ class FilmService:
             logger.warning(
                 "По запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
                 "полученные фильмы из Elasticsearch не прошли валидацию",
-                sort, genre, limit, offset,
+                sort, genre, page_size, page_number,
             )
             return None
 
@@ -277,7 +272,7 @@ class FilmService:
         logger.info(
             "Кеширование запроса на получение фильмов: "
             "sort=%s, genre=%s, limit=%d, offset=%d",
-            sort, genre, limit, offset
+            sort, genre, page_size, page_number
         )
 
         json_represent = orjson.dumps(valid_films)
@@ -289,25 +284,20 @@ class FilmService:
         logger.info(
             "Фильмы по запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
             "успешно получены. Количество: %d",
-            sort, genre, limit, offset, len(valid_films)
+            sort, genre, page_size, page_number, len(valid_films)
         )
 
         return valid_films
 
     async def search_films(
-            self, query: str, limit: int = 10, offset: int = 0
+            self, query: str, page_size: int = 10, page_number: int = 0
     ) -> Optional[list[dict]]:
         """
         Поиск фильмов по ключевым словам.
-
-        :param query: Поисковый запрос (строка, обязательный).
-        :param limit: Количество фильмов в результате (по умолчанию 10).
-        :param offset: Смещение для пагинации (по умолчанию 0).
-        :return: Список фильмов, соответствующих критериям.
         """
         logger.info(
             "Запрос на получение фильмов: query=%s, limit=%d, offset=%d",
-            query, limit, offset
+            query, page_size, page_number
         )
 
         # Формируем тело запроса для Elasticsearch
@@ -320,8 +310,8 @@ class FilmService:
                     ],
                 },
             },
-            "from": offset,
-            "size": limit
+            "from": page_number,
+            "size": page_size
         }
 
         # Выполняем запрос к Elasticsearch
@@ -330,7 +320,7 @@ class FilmService:
         logger.debug(
             "Фильмов по запросу (query=%s, limit=%d, offset=%d) найдены в "
             "найдено в Elasticsearch %d шт.",
-            query, limit, offset, len(films)
+            query, page_size, page_number, len(films)
         )
 
         if not films:
@@ -344,14 +334,14 @@ class FilmService:
             logger.warning(
                 "По запросу (query=%s, limit=%d, offset=%d) полученные фильмы "
                 "из Elasticsearch не прошли валидацию",
-                query, limit, offset,
+                query, page_size, page_number,
             )
             return None
 
         logger.info(
             "Фильмы по запросу (query=%s, limit=%d, offset=%d) "
             "успешно получены. Количество: %d",
-            query, limit, offset, len(films)
+            query, page_size, page_number, len(films)
         )
 
         return valid_films
