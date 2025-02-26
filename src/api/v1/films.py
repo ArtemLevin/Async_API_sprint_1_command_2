@@ -16,18 +16,10 @@ router = APIRouter()
 @router.get("/{film_id}")
 async def film_details(
     film_id: UUID,
-    film_service: FilmService = Depends(get_film_service)
+    film_service: FilmService = Depends(get_film_service),
 ) -> dict:
     """
     Эндпоинт для получения информации о фильме по его ID.
-
-    :param film_id: Уникальный идентификатор фильма.
-    :param film_service: Сервис для работы с данными фильмов (внедряется
-    через Depends).
-
-    :return: Словарь с данными по фильму.
-
-    :raises HTTPException: Если фильм не найден, возвращается статус 404.
     """
     film_dump = await film_service.get_film_by_id(str(film_id))
 
@@ -35,7 +27,7 @@ async def film_details(
         # Выбрасываем HTTP-исключение с кодом 404
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
-            detail="Film not found"
+            detail="Film not found",
         )
 
     return film_dump
@@ -44,15 +36,15 @@ async def film_details(
 @router.get("/search")
 async def search_films(
     query: str = Query(..., description="Поисковый запрос по фильмам"),
-    limit: int = Query(
+    page_size: int = Query(
         10,
         ge=1,
         le=100,
         description="Количество фильмов в результате (от 1 до 100)",
     ),
-    offset: int = Query(
-        0,
-        ge=0,
+    page_number: int = Query(
+        1,
+        ge=1,
         description="Смещение для пагинации (неотрицательное число)",
     ),
     film_service: FilmService = Depends(get_film_service),
@@ -60,24 +52,16 @@ async def search_films(
     """
     Эндпоинт для получения фильмов с поддержкой сортировки по рейтингу,
     фильтрации по жанру и пагинацией.
-
-    :param query: Поисковый запрос (строка, обязательный).
-    :param limit: Максимальное количество фильмов в одном запросе (по
-    умолчанию 10).
-    :param offset: Смещение для пагинации (по умолчанию 0).
-    :param film_service: Сервис для работы с фильмами.
-    :return: Список со словарями содержащими данные о фильме, отсортированных
-    и отфильтрованных по указанным параметрам.
     """
     films_dump = await film_service.search_films(
-        query=query, limit=limit, offset=offset
+        query=query, page_size=page_size, page_number=page_number
     )
 
     if not films_dump:
         # Выбрасываем HTTP-исключение с кодом 404
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
-            detail="Films not found"
+            detail="Films not found",
         )
 
     return films_dump
@@ -92,13 +76,13 @@ async def get_films(
             "-imdb_rating",
             description="Поле для сортировки (например, '-imdb_rating')",
         ),
-        limit: int = Query(
+        page_size: int = Query(
             10,
             ge=1,
             le=100,
             description="Количество фильмов в результате (от 1 до 100)",
         ),
-        offset: int = Query(
+        page_number: int = Query(
             0,
             ge=0,
             description="Смещение для пагинации (неотрицательное число)",
@@ -108,25 +92,19 @@ async def get_films(
     """
     Эндпоинт для получения фильмов с поддержкой сортировки по рейтингу,
     фильтрации по жанру и пагинацией.
-
-    :param genre: UUID жанра для фильтрации (пример: <comedy-uuid>).
-    :param sort: Поле для сортировки (пример: "-imdb_rating" для убывания).
-    :param limit: Максимальное количество фильмов в одном запросе (по
-    умолчанию 10).
-    :param offset: Смещение для пагинации (по умолчанию 0).
-    :param film_service: Сервис для работы с фильмами.
-    :return: Список со словарями содержащими данные о фильме, отсортированных
-    и отфильтрованных по указанным параметрам.
     """
     films_dump = await film_service.get_films(
-        sort=sort, genre=str(genre), limit=limit, offset=offset
+        sort=sort,
+        genre=str(genre),
+        page_size=page_size,
+        page_number=page_number,
     )
 
     if not films_dump:
         # Выбрасываем HTTP-исключение с кодом 404
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
-            detail="Films not found"
+            detail="Films not found",
         )
 
     return films_dump
