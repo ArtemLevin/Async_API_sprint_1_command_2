@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/{film_id}")
 async def film_details(
     film_id: UUID,
-    film_service: FilmService = Depends(get_film_service)
+    film_service: FilmService = Depends(get_film_service),
 ) -> dict:
     """
     Эндпоинт для получения информации о фильме по его ID.
@@ -28,7 +28,7 @@ async def film_details(
         # Выбрасываем HTTP-исключение с кодом 404
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
-            detail="Film not found"
+            detail="Film not found",
         )
 
     return film_dump
@@ -44,8 +44,8 @@ async def search_films(
         description="Количество фильмов в результате (от 1 до 100)",
     ),
     page_number: int = Query(
-        0,
-        ge=0,
+        1,
+        ge=1,
         description="Смещение для пагинации (неотрицательное число)",
     ),
     film_service: FilmService = Depends(get_film_service),
@@ -62,7 +62,7 @@ async def search_films(
         # Выбрасываем HTTP-исключение с кодом 404
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
-            detail="Films not found"
+            detail="Films not found",
         )
 
     return films_dump
@@ -105,7 +105,7 @@ async def get_films(
         # Выбрасываем HTTP-исключение с кодом 404
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
-            detail="Films not found"
+            detail="Films not found",
         )
 
     return films_dump

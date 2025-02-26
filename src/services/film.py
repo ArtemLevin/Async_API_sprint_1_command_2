@@ -31,9 +31,6 @@ class FilmService:
     def __init__(self, redis: Redis, elastic: AsyncElasticsearch):
         """
         Инициализация FilmService.
-
-        :param redis: Клиент Redis для работы с кешем.
-        :param elastic: Клиент Elasticsearch для работы с хранилищем данных.
         """
         self.redis = redis
         self.elastic = elastic
@@ -206,7 +203,7 @@ class FilmService:
         """
         logger.info(
             "Запрос на получение фильмов: "
-            "sort=%s, genre=%s, limit=%d, offset=%d",
+            "sort=%s, genre=%s, page_size=%d, page_number=%d",
             sort, genre, page_size, page_number
         )
 
@@ -216,8 +213,8 @@ class FilmService:
         # Проверяем наличие результата в кеше (Redis)
         if cached_films := await self._get_from_cache(cache_key):
             logger.debug(
-                "Фильмы по запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
-                "найдены в кеше.",
+                "Фильмы по запросу (sort=%s, genre=%s, page_size=%d, "
+                "page_number=%d) найдены в кеше.",
                 sort, genre, page_size, page_number
             )
             return cached_films
@@ -232,6 +229,8 @@ class FilmService:
         sort = [{sort_field: sort_order}]
 
         # Формируем тело запроса для Elasticsearch
+        from_value = (page_number - 1) * page_size
+
         body = {
             "query": {
                 "bool": {
@@ -240,16 +239,16 @@ class FilmService:
                 },
             },
             "sort": sort,
-            "from": page_number,
-            "size": page_size
+            "from": from_value,
+            "size": page_size,
         }
 
         # Выполняем запрос к Elasticsearch
         films = await self._get_films_from_elastic(body)
 
         logger.debug(
-            "Фильмов по запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
-            "найдено в Elasticsearch %d шт.",
+            "Фильмов по запросу (sort=%s, genre=%s, page_size=%d, "
+            "page_number=%d) найдено в Elasticsearch %d шт.",
             sort, genre, page_size, page_number, len(films)
         )
 
@@ -262,16 +261,16 @@ class FilmService:
 
         if not valid_films:
             logger.warning(
-                "По запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
+                "По запросу (sort=%s, genre=%s, page_size=%d, page_number=%d) "
                 "полученные фильмы из Elasticsearch не прошли валидацию",
-                sort, genre, page_size, page_number,
+                sort, genre, page_size, page_number
             )
             return None
 
         # Кешируем асинхронно результат в Redis
         logger.info(
             "Кеширование запроса на получение фильмов: "
-            "sort=%s, genre=%s, limit=%d, offset=%d",
+            "sort=%s, genre=%s, page_size=%d, page_number=%d",
             sort, genre, page_size, page_number
         )
 
@@ -282,25 +281,28 @@ class FilmService:
         ))
 
         logger.info(
-            "Фильмы по запросу (sort=%s, genre=%s, limit=%d, offset=%d) "
-            "успешно получены. Количество: %d",
+            "Фильмы по запросу (sort=%s, genre=%s, page_size=%d, "
+            "page_number=%d) успешно получены. Количество: %d",
             sort, genre, page_size, page_number, len(valid_films)
         )
 
         return valid_films
 
     async def search_films(
-            self, query: str, page_size: int = 10, page_number: int = 0
+            self, query: str, page_size: int = 10, page_number: int = 1
     ) -> Optional[list[dict]]:
         """
         Поиск фильмов по ключевым словам.
         """
         logger.info(
-            "Запрос на получение фильмов: query=%s, limit=%d, offset=%d",
+            "Запрос на получение фильмов: "
+            "query=%s, page_size=%d, page_number=%d",
             query, page_size, page_number
         )
 
         # Формируем тело запроса для Elasticsearch
+        from_value = (page_number - 1) * page_size
+
         body = {
             "query": {
                 "multi_match": {
@@ -310,15 +312,15 @@ class FilmService:
                     ],
                 },
             },
-            "from": page_number,
-            "size": page_size
+            "from": from_value,
+            "size": page_size,
         }
 
         # Выполняем запрос к Elasticsearch
         films = await self._get_films_from_elastic(body)
 
         logger.debug(
-            "Фильмов по запросу (query=%s, limit=%d, offset=%d) найдены в "
+            "Фильмов по запросу (query=%s, page_size=%d, page_number=%d) "
             "найдено в Elasticsearch %d шт.",
             query, page_size, page_number, len(films)
         )
@@ -332,14 +334,14 @@ class FilmService:
 
         if not valid_films:
             logger.warning(
-                "По запросу (query=%s, limit=%d, offset=%d) полученные фильмы "
-                "из Elasticsearch не прошли валидацию",
-                query, page_size, page_number,
+                "По запросу (query=%s, page_size=%d, page_number=%d) "
+                "полученные фильмы из Elasticsearch не прошли валидацию",
+                query, page_size, page_number
             )
             return None
 
         logger.info(
-            "Фильмы по запросу (query=%s, limit=%d, offset=%d) "
+            "Фильмы по запросу (query=%s, page_size=%d, page_number=%d) "
             "успешно получены. Количество: %d",
             query, page_size, page_number, len(films)
         )
