@@ -29,6 +29,12 @@ class ETLService:
         retry=retry_if_exception_type((ConnectionError, RequestError)),
         reraise=True
     )
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((ConnectionError, RequestError)),
+        reraise=True
+    )
     async def extract_genres_from_films(self, films_index: str) -> set:
         """
         Извлечь уникальные жанры из индекса фильмов.
@@ -40,14 +46,16 @@ class ETLService:
         genres = set()
 
         try:
-            # Используем Scroll API для извлечения всех документов из
-            # индекса `films`
+            # Используем Scroll API для извлечения всех документов из индекса `films`
             async for doc in helpers.async_scan(
                     self.elastic, index=films_index
             ):
                 film_genres = doc["_source"].get("genres", [])
                 for genre in film_genres:
-                    genres.add((genre["id"], genre["name"]))
+                    if isinstance(genre, dict) and "id" in genre and "name" in genre:
+                        genres.add((genre["id"], genre["name"]))
+                    else:
+                        logger.warning(f"Неверный формат жанра: {genre}")
         except NotFoundError:
             logger.error(f"Индекс {films_index} не найден.")
             raise

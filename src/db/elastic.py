@@ -10,35 +10,25 @@ logging.basicConfig(level=logging.INFO)
 
 settings = Settings()
 
-es: AsyncElasticsearch | None = None
+es: ElasticService | None = None
 
 
 async def get_elastic() -> ElasticService:
-    """
-    Возвращает экземпляр ElasticService, создавая клиента Elasticsearch при необходимости.
-    """
     global es
     if not es:
         logger.info("Создание клиента Elasticsearch...")
         try:
-            es = AsyncElasticsearch(
+            es_client = AsyncElasticsearch(
                 hosts=[f"http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}"]
             )
-            logger.info("Клиент Elasticsearch успешно создан. Выполняем проверку подключения...")
-            # Проверка подключения
-            if not await es.ping():
-                logger.error("Не удалось подключиться к Elasticsearch.")
+            if not await es_client.ping():
                 raise ConnectionError("Elasticsearch недоступен")
-            logger.info("Подключение к Elasticsearch успешно установлено.")
-        except ApiError as e:
-            logger.error("Ошибка при создании клиента Elasticsearch: %s", str(e))
-            raise
+            es = ElasticService(es_client)
+            logger.info("Клиент Elasticsearch успешно создан.")
         except Exception as e:
-            logger.error("Неизвестная ошибка при создании клиента Elasticsearch: %s", str(e))
+            logger.error(f"Ошибка при создании клиента Elasticsearch: {e}")
             raise
-    else:
-        logger.info("Клиент Elasticsearch уже существует. Возвращаем существующий экземпляр.")
-    return ElasticService(es)
+    return es
 
 
 async def close_elastic():
