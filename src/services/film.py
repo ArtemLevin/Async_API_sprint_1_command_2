@@ -131,7 +131,14 @@ class FilmService:
             )
 
         else:
-            return film['_source']
+            try:
+                return film['_source']
+            except (KeyError, TypeError) as e:
+                logger.error(
+                    "Ошибка некорректного ответа от Elasticsearch для поиска "
+                    "фильма с ID %s: %s",
+                    film_id, e
+                )
 
     async def _get_films_from_elastic(
             self, body: dict
@@ -142,11 +149,20 @@ class FilmService:
         try:
             films = await self.elastic.search(index=settings.ELASTIC_INDEX, body=body)
 
+
         except settings.ELASTIC_EXCEPTIONS as e:
             logger.error("Ошибка при запросе к Elasticsearch: %s", e)
 
+
         else:
-            return films["hits"]["hits"]
+            try:
+                return films["hits"]["hits"]
+            except (KeyError, TypeError) as e:
+                logger.error(
+                    "Ошибка некорректного ответа от Elasticsearch: %s."
+                    " 'body' запроса: %s",
+                    e, body
+                )
 
     async def get_film_by_id(self, film_id: str) -> dict | None:
         """
@@ -195,6 +211,7 @@ class FilmService:
             page_size: int = 10,
             page_number: int = 0,
     ) -> list[dict] | None :
+
 
         """
         Получить список фильмов с поддержкой сортировки по рейтингу,
