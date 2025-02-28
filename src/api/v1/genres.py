@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from src.db.elastic import get_elastic
-from src.db.redis import get_redis
+from src.db.redis_client import get_redis
 from src.models.models import Genre
 from src.services.genre_service import GenreService
 

@@ -1,11 +1,12 @@
-# app/services/base_service.py
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+from src.core.exceptions import CacheServiceError, ElasticServiceError
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 class BaseService(ABC):
@@ -31,21 +32,31 @@ class BaseService(ABC):
         Получение объекта по UUID из кэша или Elasticsearch.
         """
         cache_key = self.get_cache_key(unique_id)
+        logger.info(f"Начат процесс получения объекта с UUID '{unique_id}'.")
 
         # Попытка получить данные из кэша
-        cached_data = await self.cache_service.get(cache_key)
-        if cached_data:
-            logger.info(f"Данные для UUID '{unique_id}' найдены в кэше.")
-            try:
-                return self.parse_elastic_response({"_source": cached_data})
-            except Exception as e:
-                logger.error(
-                    f"Ошибка валидации кэшированных данных для UUID "
-                    f"'{unique_id}': {e}"
-                )
-                return None
+        try:
+            cached_data = await self.cache_service.get(cache_key)
+            if cached_data:
+                logger.info(f"Данные для UUID '{unique_id}' найдены в кэше.")
+                try:
+                    return self.parse_elastic_response({"_source": cached_data})
+                except ValidationError as e:
+                    logger.error(
+                        f"Ошибка валидации кэшированных данных для UUID "
+                        f"'{unique_id}': {e}"
+                    )
+                    return None
+        except Exception as e:
+            logger.error(
+                f"Ошибка при получении данных из кэша для UUID '{unique_id}': {e}"
+            )
+            raise CacheServiceError(
+                f"Ошибка при обращении к кэшу для UUID '{unique_id}'."
+            )
 
         # Если данных в кэше нет, запрос в Elasticsearch
+        logger.info(f"Данные для UUID '{unique_id}' не найдены в кэше. Выполняется запрос в Elasticsearch.")
         query = {"query": {"term": {"uuid": str(unique_id)}}}
         try:
             response = await self.elastic_service.search(
@@ -53,19 +64,30 @@ class BaseService(ABC):
             )
             hits = response.get("hits", {}).get("hits", [])
             if not hits:
-                logger.warning(f"Объект с UUID '{unique_id}' не найден.")
+                logger.warning(f"Объект с UUID '{unique_id}' не найден в Elasticsearch.")
                 return None
 
             parsed_data = self.parse_elastic_response(hits[0])
             if parsed_data:
                 # Сохранение данных в кэш
-                await self.cache_service.set(cache_key, parsed_data.json())
+                try:
+                    await self.cache_service.set(cache_key, parsed_data.json())
+                    logger.info(f"Данные для UUID '{unique_id}' сохранены в кэш.")
+                except Exception as e:
+                    logger.error(
+                        f"Ошибка при сохранении данных в кэш для UUID '{unique_id}': {e}"
+                    )
+                    raise CacheServiceError(
+                        f"Ошибка при сохранении данных в кэш для UUID '{unique_id}'."
+                    )
             return parsed_data
         except Exception as e:
             logger.error(
-                f"Ошибка при запросе объекта с UUID '{unique_id}': {e}"
+                f"Ошибка при запросе объекта с UUID '{unique_id}' в Elasticsearch: {e}"
             )
-            raise
+            raise ElasticServiceError(
+                f"Ошибка при запросе объекта с UUID '{unique_id}' в Elasticsearch."
+            )
 
     async def get_all(
             self, query: Dict[str, Any] = None, size: int = 1000
@@ -74,12 +96,18 @@ class BaseService(ABC):
         Получение всех объектов из Elasticsearch по произвольному запросу.
         """
         query = query or {"query": {"match_all": {}}}
+        logger.info("Начат процесс получения всех объектов.")
         try:
             response = await self.elastic_service.search(
                 self.index_name, query, size=size
             )
             hits = response.get("hits", {}).get("hits", [])
-            return [self.parse_elastic_response(hit) for hit in hits if hit]
+            logger.info(f"Найдено {len(hits)} объектов в Elasticsearch.")
+            return [
+                self.parse_elastic_response(hit)
+                for hit in hits
+                if hit
+            ]
         except Exception as e:
             logger.error(f"Ошибка при запросе всех объектов: {e}")
-            return []
+            raise ElasticServiceError("Ошибка при запросе всех объектов.")

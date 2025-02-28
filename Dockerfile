@@ -1,7 +1,8 @@
-FROM python:3.10-slim
+FROM python:3.10
 
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -12,4 +13,6 @@ RUN pip install --upgrade pip && \
 
 COPY . /app
 
-CMD ["python", "main.py"]
+CMD ["sh", "-c", "python3 /app/src/db/fill_movies.py"]
+
+# && python3 /app/src/main.py
