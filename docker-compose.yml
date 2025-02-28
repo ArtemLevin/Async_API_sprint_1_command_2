@@ -3,8 +3,8 @@ version: "3.8"
 services:
   async_api:
     build: .
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     depends_on:
       redis:
         condition: service_healthy
@@ -32,6 +32,7 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - logger.org.elasticsearch.deprecation=ERROR
     expose:
       - "${ELASTIC_PORT}"
     env_file:
