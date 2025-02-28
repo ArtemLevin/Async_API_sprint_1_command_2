@@ -7,8 +7,8 @@ settings = Settings()
 redis: Redis | None = None
 
 
-async def get_redis() -> Redis:
+async def get_redis() -> CacheService:
     global redis
-    if not redis:  # Создаем соединение, если его ещё нет
+    if not redis:
         redis = Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT)
     return CacheService(redis)

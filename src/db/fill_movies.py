@@ -15,14 +15,10 @@ from src.services.add_films import AddFilmService
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализация Faker для генерации фейковых данных
+
 fake = Faker()
 
 
-# Настройки повторных попыток:
-# - Максимум 3 попытки
-# - Экспоненциальная задержка между попытками
-# - Повторять при любых исключениях
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
@@ -60,14 +56,14 @@ async def populate_films(
         service: AddFilmService, num_films: int, batch_size: int = 10
 ) -> None:
     """
-    Заполнить Elasticsearch и Redis фейковыми фильмами через AddFilmService.
+    Заполнить Elasticsearch фейковыми фильмами через AddFilmService.
 
     :param service: Экземпляр AddFilmService для записи фильмов.
     :param num_films: Общее количество фильмов для генерации.
     :param batch_size: Количество фильмов в одном батче.
     """
     logger.info(
-        "Начало заполнения Elasticsearch и Redis. Всего фильмов: %d, "
+        "Начало заполнения Elasticsearch. Всего фильмов: %d, "
         "размер батча: %d",
         num_films, batch_size
     )
@@ -79,11 +75,10 @@ async def populate_films(
             "Генерация фильмов для батча %d - %d...", batch_start, batch_end
         )
 
-        # Генерация фейковых данных
+
         films = await generate_fake_films_async(batch_size)
 
         try:
-            # Параллельная обработка фильмов
             await asyncio.gather(
                 *[
                     add_film_with_retry(service, film["id"], film)
@@ -92,7 +87,7 @@ async def populate_films(
             )
         except Exception:
             logger.exception(
-                "Ошибка при добавлении фильмов в Elasticsearch/Redis"
+                "Ошибка при добавлении фильмов в Elasticsearch"
             )
             raise
 
@@ -111,7 +106,7 @@ async def add_film_with_retry(
         service: AddFilmService, film_id: str, film_data: Dict
 ) -> None:
     """
-    Добавить фильм в Elasticsearch и Redis с использованием retry.
+    Добавить фильм в Elasticsearch с использованием retry.
 
     :param service: Экземпляр AddFilmService.
     :param film_id: ID фильма.
@@ -126,21 +121,18 @@ async def add_film_with_retry(
 )
 async def main() -> None:
     """
-    Основная функция для запуска заполнения Elasticsearch и Redis.
+    Основная функция для запуска заполнения Elasticsearch.
     """
     logger.info("Инициализация клиентов Redis и Elasticsearch...")
-    redis_client = await get_redis()  # Получаем экземпляр Redis
     logger.info("Получили Redis...")
-    elastic_client = await get_elastic()  # Получаем экземпляр Elasticsearch
+    elastic_client = await get_elastic()
     logger.info("Получили Elasticsearch...")
 
     film_service = AddFilmService(elastic=elastic_client)
 
-    # Общее количество фильмов
     num_films = 200
     batch_size = 10
 
-    # Заполняем Elasticsearch и Redis
     try:
         await populate_films(
             film_service, num_films=num_films, batch_size=batch_size

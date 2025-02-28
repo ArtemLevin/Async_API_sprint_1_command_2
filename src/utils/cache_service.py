@@ -8,24 +8,12 @@ logger = logging.getLogger(__name__)
 
 class CacheService:
     def __init__(self, redis_client: Redis, cache_expire: int = 300):
-        """
-        Сервис для работы с кешем (Redis).
-
-        :param redis_client: Асинхронный клиент Redis.
-        :param cache_expire: Время жизни кеша (в секундах).
-        """
         self.redis_client = redis_client
         self.cache_expire = cache_expire
         logger.info("Инициализация CacheService: cache_expire=%d", self.cache_expire)
 
     @with_retry()
     async def get(self, key: str) -> str|None:
-        """
-        Получить значение из кеша по ключу.
-
-        :param key: Ключ для получения значения.
-        :return: Значение из кеша или None, если ключ отсутствует.
-        """
         logger.debug("Попытка получить значение из кеша: key=%s", key)
         try:
             value = await self.redis_client.get(key)
@@ -40,12 +28,6 @@ class CacheService:
 
     @with_retry()
     async def set(self, key: str, value: str) -> None:
-        """
-        Сохранить значение в кеш с заданным временем истечения.
-
-        :param key: Ключ для сохранения значения.
-        :param value: Значение для сохранения.
-        """
         logger.debug("Попытка сохранить значение в кеш: key=%s, value=%s, expire=%d",
                      key, value, self.cache_expire)
         try:

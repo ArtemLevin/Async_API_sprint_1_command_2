@@ -4,9 +4,9 @@ from elasticsearch import ApiError
 from src.utils.elastic_service import ElasticService
 from src.core.config import Settings
 
-# Настройка логгера
+
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)  # Устанавливаем уровень логирования
+logging.basicConfig(level=logging.INFO)
 
 settings = Settings()
 

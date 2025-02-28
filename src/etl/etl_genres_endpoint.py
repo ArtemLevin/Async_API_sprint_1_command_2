@@ -4,7 +4,7 @@ from elasticsearch import AsyncElasticsearch
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.db.elastic import get_elastic
-from src.services.etl_genres import ETLService
+from src.etl.etl_genres import ETLService
 
 router = APIRouter()
 

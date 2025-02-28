@@ -16,25 +16,12 @@ BULK_CHUNK_SIZE = 10  # Максимальное количество докум
 
 
 class AddFilmService:
-    """
-    Сервис для работы с фильмами.
-
-    Осуществляет взаимодействие с Redis (для кеширования)
-    и Elasticsearch (для полнотекстового поиска).
-    """
-
     def __init__(self, elastic: AsyncElasticsearch):
-        """
-        Инициализация FilmService.
-        """
         if elastic is None:
             raise RuntimeError("Elasticsearch клиент не инициализирован")
         self.elastic = elastic
 
     async def add_film(self, film_id: str, film_data: dict) -> None:
-        """
-        Добавление одного фильма в Elasticsearch.
-        """
         logger.info("Добавление фильма. ID: %s", film_id)
 
         # Конвертируем все Decimal в float
