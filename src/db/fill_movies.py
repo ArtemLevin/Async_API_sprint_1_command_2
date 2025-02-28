@@ -130,7 +130,7 @@ async def main() -> None:
 
     film_service = AddFilmService(elastic=elastic_client)
 
-    num_films = 200
+    num_films = 10
     batch_size = 10
 
     try:

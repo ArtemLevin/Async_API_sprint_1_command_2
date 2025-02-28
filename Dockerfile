@@ -13,6 +13,5 @@ RUN pip install --upgrade pip && \
 
 COPY . /app
 
-CMD ["sh", "-c", "python3 /app/src/db/fill_movies.py"]
-
-# && python3 /app/src/main.py
+CMD python3 /app/src/db/fill_movies.py && \
+    uvicorn src.main:app --host 0.0.0.0 --port 8000

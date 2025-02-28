@@ -4,11 +4,11 @@ from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 from redis.asyncio import Redis
 
-from api.v1 import films
-from api.v1.persons import router as persons_router
-from api.v1.genres import router as genres_router
+from src.api.v1 import films
+from src.api.v1.persons import router as persons_router
+from src.api.v1.genres import router as genres_router
 from src.core.config import settings
-from db import elastic, redis_client
+from src.db import elastic, redis_client
 
 
 
@@ -43,7 +43,7 @@ async def startup():
     try:
         logger.info("Инициализация подключения к Elasticsearch...")
         elastic.es = AsyncElasticsearch(
-            hosts=[f'{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}']
+            hosts=[f'http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}']
         )
         # Проверяем доступность Elasticsearch
         if not await elastic.es.ping():

@@ -1,29 +1,20 @@
 import logging
+from typing import Any
+
+from elastic_transport import ObjectApiResponse
 from elasticsearch import AsyncElasticsearch, ApiError
 from src.utils.decorators import with_retry
 
-logger = logging.getLogger(__name__)  # Логгер для текущего модуля
+logger = logging.getLogger(__name__)
 
 
 class ElasticService:
     def __init__(self, es_client: AsyncElasticsearch):
-        """
-        Сервис для работы с Elasticsearch.
-
-        :param es_client: Асинхронный клиент Elasticsearch.
-        """
         self.es_client = es_client
         logger.info("Инициализация ElasticService с клиентом Elasticsearch.")
 
     @with_retry()
     async def search(self, index: str, query: dict) -> dict:
-        """
-        Выполнить поисковый запрос в Elasticsearch.
-
-        :param index: Название индекса, в котором будет выполнен запрос.
-        :param query: Тело запроса (JSON).
-        :return: Результат поиска (JSON).
-        """
         logger.debug("Попытка выполнить запрос search в Elasticsearch: index=%s, query=%s", index, query)
         try:
             response = await self.es_client.search(index=index, body=query)
@@ -35,7 +26,7 @@ class ElasticService:
                          index, str(e))
             raise
 
-    async def index(self, index: str, id: str, body: dict) -> dict:
+    async def index(self, index: str, id: str, body: dict) -> ObjectApiResponse[Any]:
         """
         Добавить или обновить документ в Elasticsearch.
         """
@@ -50,12 +41,6 @@ class ElasticService:
             raise
 
     async def close(self):
-        """
-        Закрыть соединение с Elasticsearch.
-
-        Этот метод завершает асинхронное соединение с клиентом Elasticsearch,
-        чтобы избежать утечек ресурсов.
-        """
         logger.info("Закрытие соединения с Elasticsearch.")
         try:
             await self.es_client.close()
