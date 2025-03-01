@@ -82,8 +82,8 @@ async def get_films(
             description="Количество фильмов в результате (от 1 до 100)",
         ),
         page_number: int = Query(
-            0,
-            ge=0,
+            1,
+            ge=1,
             description="Смещение для пагинации (неотрицательное число)",
         ),
         film_service: FilmService = Depends(get_film_service),

@@ -4,7 +4,7 @@ from functools import lru_cache
 from typing import Annotated
 
 import orjson
-from elasticsearch import AsyncElasticsearch, NotFoundError, helpers
+from elasticsearch import AsyncElasticsearch, NotFoundError
 from fastapi import Depends
 from pydantic import ValidationError
 from redis.asyncio import Redis
@@ -110,15 +110,20 @@ class FilmService:
             logger.error("Ошибка при чтении кеша из Redis: %s", e)
 
         else:
-            if cache_data:
+            try:
                 return orjson.loads(cache_data)
+
+            except orjson.JSONDecodeError:
+                return None
 
     async def _get_film_from_elastic(self, film_id: str) -> dict | None:
         """
         Вспомогательный метод для получения фильма из Elasticsearch.
         """
         try:
-            film = await self.elastic.get(index=settings.ELASTIC_INDEX, id=film_id)
+            film = await self.elastic.get(
+                index=settings.ELASTIC_INDEX, id=film_id
+            )
 
         except NotFoundError:
             logger.warning("Фильм c ID %s не найден в Elasticsearch.", film_id)
@@ -147,9 +152,17 @@ class FilmService:
         Вспомогательный метод для получения фильмов из Elasticsearch.
         """
         try:
-            films = await self.elastic.search(index=settings.ELASTIC_INDEX, body=body)
+            films = await self.elastic.search(
+                index=settings.ELASTIC_INDEX, body=body
+            )
 
-        except ELASTIC_EXCEPTIONS as e:
+        except NotFoundError:
+            logger.warning(
+                "Фильмы не найдены в Elasticsearch. 'body' запроса: %s",
+                body,
+            )
+
+        except settings.ELASTIC_EXCEPTIONS as e:
             logger.error(
                 "Ошибка при запросе к Elasticsearch: %s. 'body' запроса: %s",
                 e, body
@@ -164,6 +177,8 @@ class FilmService:
                     " 'body' запроса: %s",
                     e, body
                 )
+
+        return []
 
     async def get_film_by_id(self, film_id: str) -> dict | None:
         """
@@ -210,7 +225,7 @@ class FilmService:
             genre: str = None,
             sort: str = "-imdb_rating",
             page_size: int = 10,
-            page_number: int = 0,
+            page_number: int = 1,
     ) -> list[dict] | None:
 
         """
@@ -346,7 +361,7 @@ class FilmService:
 
         # Проверяем валидность полученных данных из Elasticsearch и формируем
         # словари с нужными ключами из объектов модели Film
-        valid_films = self._validate_films(films, GET_FILMS_EXCLUDE)
+        valid_films = self._validate_films(films, settings.GET_FILMS_EXCLUDE)
 
         if not valid_films:
             logger.warning(
