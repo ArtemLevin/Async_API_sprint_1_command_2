@@ -37,7 +37,7 @@ class PersonService(BaseService):
             )
             return None
 
-    async def get_all_persons(self) -> List[Person]:
+    async def get_all_persons(self) -> list[BaseModel]:
         """
         Получение списка всех персон.
         """

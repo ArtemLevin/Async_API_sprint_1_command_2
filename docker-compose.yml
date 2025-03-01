@@ -1,8 +1,8 @@
+version: "3.8"
+
 services:
   async_api:
     build: .
-    expose:
-      - "8000"
     ports:
       - "8000:8000"
     depends_on:
@@ -16,7 +16,7 @@ services:
   redis:
     image: redis:6.2
     expose:
-      - "6379"
+      - "${REDIS_PORT}"
     env_file:
       - ./.env
     healthcheck:
@@ -25,21 +25,26 @@ services:
       retries: 5
       start_period: 30s
       timeout: 10s
-  
+
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.6.2
+    image: elasticsearch:8.6.2
     environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
+        ES_LOG_LEVEL: ERROR
+        discovery.type: single-node
+        xpack.security.enabled: false
+        ES_JAVA_OPTS: -Xms1g -Xmx1g
     expose:
-      - "9200"
-    ports:
-      - "9200:9200"
+      - "${ELASTIC_PORT}"
     env_file:
       - ./.env
     healthcheck:
-      test: curl -s http://elasticsearch:9200 >/dev/null || exit 1
+      test: curl -s http://${ELASTIC_HOST}:${ELASTIC_PORT} >/dev/null || exit 1
       interval: 10s
       retries: 5
-      start_period: 30s
+      start_period: 120s
       timeout: 10s
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+volumes:
+  es_data:

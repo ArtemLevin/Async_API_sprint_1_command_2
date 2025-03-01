@@ -6,10 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.services.film import FilmService, get_film_service
 
-# Настраиваем логгер
+
 logger = logging.getLogger(__name__)
 
-# Создаём маршрут для работы с фильмами
 router = APIRouter()
 
 

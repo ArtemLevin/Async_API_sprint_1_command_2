@@ -13,12 +13,15 @@ build/
 .eggs/
 
 # Исключения для виртуального окружения
+.env
+.venv
+env/
 venv/
 .env/
 .venv/
-env/
 ENV/
 env.bak/
+venv.bak/
 *.env  # Файлы окружения
 
 # Исключения для Docker

@@ -30,8 +30,7 @@ class GenreService(BaseService):
             return Genre(
                 id=source["uuid"],
                 name=source["name"],
-                description=source.get("description")  # Описание может быть
-                # необязательным
+                description=source.get("description")
             )
         except KeyError as e:
             logger.error(
