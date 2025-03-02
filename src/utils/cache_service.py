@@ -12,7 +12,7 @@ class CacheService:
         self.cache_expire = cache_expire
         logger.info("Инициализация CacheService: cache_expire=%d", self.cache_expire)
 
-    @with_retry()
+    # @with_retry()
     async def get(self, key: str) -> str|None:
         logger.debug("Попытка получить значение из кеша: key=%s", key)
         try:
@@ -26,7 +26,7 @@ class CacheService:
             logger.error("Ошибка при получении значения из кеша: key=%s, error=%s", key, str(e))
             raise
 
-    @with_retry()
+    # @with_retry()
     async def set(self, key: str, value: str) -> None:
         logger.debug("Попытка сохранить значение в кеш: key=%s, value=%s, expire=%d",
                      key, value, self.cache_expire)

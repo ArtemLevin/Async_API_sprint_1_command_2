@@ -1,10 +1,8 @@
 import logging
 
 from elasticsearch import AsyncElasticsearch, helpers
-from elasticsearch.exceptions import (ConnectionError, NotFoundError,
-                                      RequestError)
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_exponential)
+from elasticsearch.exceptions import ConnectionError, RequestError
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +25,7 @@ class ETLService:
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((ConnectionError, RequestError)),
-        reraise=True
-    )
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ConnectionError, RequestError)),
-        reraise=True
+        reraise=True,
     )
     async def extract_genres_from_films(self, films_index: str) -> set:
         """
@@ -47,22 +39,16 @@ class ETLService:
 
         try:
             # Используем Scroll API для извлечения всех документов из индекса `films`
-            async for doc in helpers.async_scan(
-                    self.elastic, index=films_index
-            ):
-                film_genres = doc["_source"].get("genres", [])
+            async for doc in helpers.async_scan(self.elastic, index=films_index):
+                film_genres = doc["_source"].get("genre", [])
+                print(doc["_source"])
                 for genre in film_genres:
-                    if isinstance(genre, dict) and "id" in genre and "name" in genre:
-                        genres.add((genre["id"], genre["name"]))
+                    if isinstance(genre, dict) and "uuid" in genre and "name" in genre:
+                        genres.add((genre["uuid"], genre["name"]))
                     else:
                         logger.warning(f"Неверный формат жанра: {genre}")
-        except NotFoundError:
-            logger.error(f"Индекс {films_index} не найден.")
-            raise
         except ConnectionError:
-            logger.error(
-                "Ошибка подключения к Elasticsearch. Попробуем снова..."
-            )
+            logger.error("Ошибка подключения к Elasticsearch. Попробуем снова...")
             raise
         except Exception as e:
             logger.error(f"Произошла ошибка при извлечении жанров: {e}")
@@ -75,11 +61,11 @@ class ETLService:
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((ConnectionError, RequestError)),
-        reraise=True
+        reraise=True,
     )
-    async def create_genres_index(self, genres_index: str):
+    async def recreate_genres_index(self, genres_index: str):
         """
-        Создаёт индекс `genres` в Elasticsearch, если он не существует.
+        Удаляет существующий индекс `genres` (если он существует) и создаёт новый с указанным маппингом.
 
         :param genres_index: Имя индекса жанров.
         """
@@ -87,44 +73,38 @@ class ETLService:
         try:
             exists = await self.elastic.indices.exists(index=genres_index)
 
-            if not exists:
-                logger.info(
-                    f"Индекс {genres_index} не существует. Создание индекса."
-                )
-                # Определяем схему индекса
-                body = {
-                    "mappings": {
-                        "properties": {
-                            "id": {"type": "keyword"},
-                            "name": {"type": "text", "analyzer": "standard"},
-                        }
+            if exists:
+                logger.info(f"Индекс {genres_index} уже существует. Удаление индекса...")
+                await self.elastic.indices.delete(index=genres_index)
+                logger.info(f"Индекс {genres_index} успешно удалён.")
+
+            logger.info(f"Создание нового индекса {genres_index} с маппингом...")
+            # Определяем схему индекса
+            body = {
+                "mappings": {
+                    "properties": {
+                        "id": {"type": "keyword"},
+                        "name": {"type": "text", "analyzer": "standard"},
                     }
                 }
-                await self.elastic.indices.create(
-                    index=genres_index, body=body
-                )
-                logger.info(f"Индекс {genres_index} успешно создан.")
-            else:
-                logger.info(f"Индекс {genres_index} уже существует.")
+            }
+            await self.elastic.indices.create(index=genres_index, body=body)
+            logger.info(f"Индекс {genres_index} успешно создан.")
         except RequestError as e:
             logger.error(f"Ошибка при создании индекса {genres_index}: {e}")
             raise
         except ConnectionError:
-            logger.error(
-                "Ошибка подключения к Elasticsearch. Попробуем снова..."
-            )
+            logger.error("Ошибка подключения к Elasticsearch. Попробуем снова...")
             raise
         except Exception as e:
-            logger.error(
-                f"Произошла ошибка при проверке/создании индекса: {e}"
-            )
+            logger.error(f"Произошла ошибка при проверке/создании индекса: {e}")
             raise
 
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((ConnectionError, RequestError)),
-        reraise=True
+        reraise=True,
     )
     async def load_genres_to_index(self, genres_index: str, genres: set):
         """
@@ -148,10 +128,7 @@ class ETLService:
             await helpers.async_bulk(self.elastic, actions)
             logger.info(f"Загрузка завершена. Загружено {len(genres)} жанров.")
         except ConnectionError:
-            logger.error(
-                "Ошибка подключения при загрузке данных в Elasticsearch. "
-                "Попробуем снова..."
-            )
+            logger.error("Ошибка подключения при загрузке данных в Elasticsearch. Попробуем снова...")
             raise
         except Exception as e:
             logger.error(f"Произошла ошибка при загрузке данных: {e}")
@@ -167,7 +144,7 @@ class ETLService:
         logger.info("Запуск ETL процесса.")
         try:
             genres = await self.extract_genres_from_films(films_index)
-            await self.create_genres_index(genres_index)
+            await self.recreate_genres_index(genres_index)
             await self.load_genres_to_index(genres_index, genres)
             logger.info("ETL процесс завершён.")
         except Exception as e:

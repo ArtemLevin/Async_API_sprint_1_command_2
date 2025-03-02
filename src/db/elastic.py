@@ -1,6 +1,5 @@
 import logging
-from elasticsearch import AsyncElasticsearch
-from elasticsearch import ApiError
+from elasticsearch import AsyncElasticsearch, ApiError, ConnectionError
 from src.utils.elastic_service import ElasticService
 from src.core.config import Settings
 
@@ -10,26 +9,40 @@ logging.basicConfig(level=logging.INFO)
 
 settings = Settings()
 
-es: ElasticService | None = None
+es: AsyncElasticsearch | None = None
 
 
 async def get_elastic() -> ElasticService:
     global es
-    if not es:
+    if not es or not es.ping():  # Проверка, существует ли es и активно ли соединение
         logger.info("Создание клиента Elasticsearch...")
+        es_client = None
         try:
             es_client = AsyncElasticsearch(
                 hosts=[f"http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}"]
             )
             if not await es_client.ping():
                 raise ConnectionError("Elasticsearch недоступен")
-            es = ElasticService(es_client)
-            logger.info("Клиент Elasticsearch успешно создан.")
-        except Exception as e:
-            logger.error(f"Ошибка при создании клиента Elasticsearch: {e}")
-            raise
-    return es
 
+            logger.info("Клиент Elasticsearch успешно создан.")
+            es = ElasticService(es_client)
+        except ConnectionError as ce:
+            logger.error(f"Ошибка подключения к Elasticsearch: {ce}")
+            if es_client:
+                await es_client.close()  # Закрыть соединение в случае ошибки
+            raise
+        except ApiError as ae:
+            logger.error(f"Ошибка API Elasticsearch: {ae}")
+            if es_client:
+                await es_client.close()  # Закрыть соединение в случае ошибки
+            raise
+        except Exception as e:
+            logger.error(f"Неизвестная ошибка: {e}")
+            if es_client:
+                await es_client.close()  # Закрыть соединение в случае ошибки
+            raise
+
+    return es
 
 async def close_elastic():
     """
@@ -43,3 +56,4 @@ async def close_elastic():
         logger.info("Соединение с Elasticsearch успешно закрыто.")
     else:
         logger.info("Соединение с Elasticsearch уже было закрыто.")
+

@@ -57,7 +57,7 @@ class BaseService(ABC):
 
         # Если данных в кэше нет, запрос в Elasticsearch
         logger.info(f"Данные для UUID '{unique_id}' не найдены в кэше. Выполняется запрос в Elasticsearch.")
-        query = {"query": {"term": {"uuid": str(unique_id)}}}
+        query = {"query": {"term": {"id": str(unique_id)}}}
         try:
             response = await self.elastic_service.search(index=self.index_name, body=query)
             hits = response.get("hits", {}).get("hits", [])
@@ -98,7 +98,7 @@ class BaseService(ABC):
         try:
             response = await self.elastic_service.search(index=self.index_name, body=query)
             hits = response.get("hits", {}).get("hits", [])
-            logger.info(f"Найдено {len(hits)} объектов в Elasticsearch.")
+            logger.info(f"Найдено {len(hits)} объектов в Elasticsearch.{hits}")
             return [
                 self.parse_elastic_response(hit)
                 for hit in hits

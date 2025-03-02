@@ -1,296 +1,172 @@
 import logging
-from logging.config import dictConfig
-from typing import AsyncIterator, List
+from typing import Tuple, Set
+
 
 from elasticsearch import AsyncElasticsearch, helpers
-from elasticsearch._async.helpers import async_bulk
-from elasticsearch.exceptions import (ConnectionError, NotFoundError,
-                                      RequestError)
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_exponential)
-
-from src.core.logger import LOGGING
-
-dictConfig(LOGGING)
+from elasticsearch.exceptions import ConnectionError, RequestError
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
 
 class ETLPersonService:
-    def __init__(self, elastic: AsyncElasticsearch):
-        """
-        Инициализация ETLPersonService.
+    """
+    Сервис для ETL-процесса, который извлекает данные о персонах из фильмов и
+    загружает их в отдельный индекс.
+    """
 
-        :param elastic: Экземпляр клиента Elasticsearch для взаимодействия с
-        индексами.
-        """
+    def __init__(self, elastic: AsyncElasticsearch):
         self.elastic = elastic
 
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((ConnectionError, RequestError)),
-        reraise=True
+        reraise=True,
     )
-    async def create_person_index(self, person_index: str) -> None:
+    async def extract_persons_from_films(self, films_index: str) -> Set[Tuple[str, str, str]]:
         """
-        Создаёт индекс для персон с заданной схемой, если он ещё не существует.
+        Извлекает уникальные данные о персонах из индекса фильмов.
 
-        :param person_index: Имя индекса для хранения данных о персонах.
+        :param films_index: Имя индекса фильмов в Elasticsearch.
+        :return: Множество кортежей (id, name, role).
         """
-        logger.info(f"Проверяем существование индекса '{person_index}'...")
-        mapping = {
-            "mappings": {
-                "properties": {
-                    "id": {"type": "keyword"},
-                    "name": {"type": "text", "analyzer": "standard"},
-                    "role": {"type": "text", "analyzer": "standard"},
-                    "films": {"type": "keyword"}
+        logger.info(f"Извлечение данных о персонах из индекса {films_index}.")
+        persons = set()
+
+        try:
+            # Используем Scroll API для извлечения всех документов из индекса `films`
+            async for doc in helpers.async_scan(self.elastic, index=films_index):
+                film_id = doc["_id"]
+                actors = doc["_source"].get("actors", [])
+                writers = doc["_source"].get("writers", [])
+                directors = doc["_source"].get("directors", [])
+
+                for actor in actors:
+                    if isinstance(actor, dict) and "uuid" in actor and "full_name" in actor:
+                        persons.add((actor["uuid"], actor["full_name"], "actor"))
+                    else:
+                        logger.warning(f"Неверный формат актера: {actor}")
+
+                for writer in writers:
+                    if isinstance(writer, dict) and "uuid" in writer and "full_name" in writer:
+                        persons.add((writer["uuid"], writer["full_name"], "writer"))
+                    else:
+                        logger.warning(f"Неверный формат сценариста: {writer}")
+
+                for director in directors:
+                    if isinstance(director, dict) and "uuid" in director and "full_name" in director:
+                        persons.add((director["uuid"], director["full_name"], "director"))
+                    else:
+                        logger.warning(f"Неверный формат режиссера: {director}")
+
+        except ConnectionError:
+            logger.error("Ошибка подключения к Elasticsearch. Попробуем снова...")
+            raise
+        except Exception as e:
+            logger.error(f"Произошла ошибка при извлечении данных о персонах: {e}")
+            raise
+
+        logger.info(f"Извлечено {len(persons)} уникальных персон.")
+        return persons
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((ConnectionError, RequestError)),
+        reraise=True,
+    )
+    async def recreate_person_index(self, person_index: str):
+        """
+        Удаляет существующий индекс `persons` (если он существует) и создаёт новый с указанным маппингом.
+
+        :param person_index: Имя индекса персон.
+        """
+        logger.info(f"Проверка существования индекса {person_index}.")
+        try:
+            exists = await self.elastic.indices.exists(index=person_index)
+
+            if exists:
+                logger.info(f"Индекс {person_index} уже существует. Удаление индекса...")
+                await self.elastic.indices.delete(index=person_index)
+                logger.info(f"Индекс {person_index} успешно удалён.")
+
+            logger.info(f"Создание нового индекса {person_index} с маппингом...")
+            # Определяем схему индекса
+            body = {
+                "mappings": {
+                    "properties": {
+                        "id": {"type": "keyword"},
+                        "name": {"type": "text", "analyzer": "standard"},
+                        "role": {"type": "keyword"},
+                        "films": {"type": "keyword"},
+                    }
                 }
             }
-        }
-        try:
-            index_exists = await self.elastic.indices.exists(
-                index=person_index
-            )
-            if not index_exists:
-                logger.info(
-                    f"Создаём индекс '{person_index}' с мэппингом: {mapping}"
-                )
-                await self.elastic.indices.create(
-                    index=person_index, body=mapping
-                )
-                logger.info(f"Индекс '{person_index}' успешно создан.")
-            else:
-                logger.info(
-                    f"Индекс '{person_index}' уже существует, пропускаем "
-                    f"создание."
-                )
-        except NotFoundError as e:
-            logger.error(
-                f"Индекс '{person_index}' не найден. Исключение: {e}",
-                extra={"index": person_index}
-            )
-            raise
+            await self.elastic.indices.create(index=person_index, body=body)
+            logger.info(f"Индекс {person_index} успешно создан.")
         except RequestError as e:
-            logger.error(
-                f"Ошибка запроса при создании индекса '{person_index}'. "
-                f"Исключение: {e}",
-                extra={"index": person_index, "mapping": mapping}
-            )
+            logger.error(f"Ошибка при создании индекса {person_index}: {e}")
             raise
-        except ConnectionError as e:
-            logger.error(
-                f"Ошибка подключения при создании индекса '{person_index}'. "
-                f"Исключение: {e}",
-                extra={"index": person_index}
-            )
+        except ConnectionError:
+            logger.error("Ошибка подключения к Elasticsearch. Попробуем снова...")
             raise
         except Exception as e:
-            logger.error(
-                f"Произошла непредвиденная ошибка при создании индекса "
-                f"'{person_index}'. Исключение: {e}",
-                extra={"index": person_index}
-            )
+            logger.error(f"Произошла ошибка при проверке/создании индекса: {e}")
             raise
 
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((ConnectionError, RequestError)),
-        reraise=True
+        reraise=True,
     )
-    async def extract_persons(self, films_index: str) -> AsyncIterator[dict]:
+    async def load_persons_to_index(self, person_index: str, persons: Set[Tuple[str, str, str]]):
         """
-        Извлекает данные из индекса фильмов.
+        Загружает уникальные данные о персонах в индекс `persons`.
 
-        :param films_index: Имя индекса фильмов, из которого извлекаются
-        данные.
-        :yield: Генератор словарей с информацией о персонах.
+        :param person_index: Имя индекса персон.
+        :param persons: Множество кортежей (id, name, role).
         """
-        logger.info(
-            f"Начинаем извлечение данных о персонах из индекса "
-            f"'{films_index}'..."
-        )
-        query = {"query": {"match_all": {}}}
-
-        try:
-            async for doc in helpers.async_scan(
-                    self.elastic, index=films_index, query=query
-            ):
-                film_id = doc["_id"]
-                persons = doc["_source"].get("persons", [])
-                logger.debug(
-                    f"Обрабатывается документ с ID '{film_id}': найдено "
-                    f"{len(persons)} персон.",
-                    extra={"film_id": film_id, "persons_count": len(persons)}
-                )
-                for person in persons:
-                    yield {
-                        "id": person["id"],
-                        "name": person["name"],
-                        "role": person["role"],
-                        "films": [film_id]
-                    }
-        except NotFoundError as e:
-            logger.error(
-                f"Индекс '{films_index}' не найден. Исключение: {e}",
-                extra={"index": films_index, "query": query}
-            )
-            raise
-        except ConnectionError as e:
-            logger.error(
-                f"Ошибка подключения при извлечении данных из индекса "
-                f"'{films_index}'. Исключение: {e}",
-                extra={"index": films_index}
-            )
-            raise
-        except Exception as e:
-            logger.error(
-                f"Произошла непредвиденная ошибка при извлечении данных из "
-                f"индекса '{films_index}'. Исключение: {e}",
-                extra={"index": films_index, "query": query}
-            )
-            raise
-
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ConnectionError, RequestError)),
-        reraise=True
-    )
-    async def load_persons(
-            self, person_index: str, persons: List[dict]
-    ) -> None:
-        """
-        Загружает данные о персонах в индекс Elasticsearch.
-
-        :param person_index: Имя индекса для загрузки данных.
-        :param persons: Список документов о персонах.
-        """
-        logger.info(f"Начинаем загрузку данных в индекс '{person_index}'.")
+        logger.info(f"Загрузка данных о персонах в индекс {person_index}.")
         actions = [
             {
                 "_index": person_index,
-                "_id": person["id"],
-                "_source": person
+                "_id": person_id,
+                "_source": {
+                    "id": person_id,
+                    "name": person_name,
+                    "role": person_role,
+                    "films": [],  # Пустой список фильмов (можно дополнить позже)
+                },
             }
-            for person in persons
+            for person_id, person_name, person_role in persons
         ]
+
         try:
-            success, failed = await async_bulk(self.elastic, actions)
-            logger.info(
-                f"Загрузка завершена. Результаты: Успешно - {success}, "
-                f"Неудачно - {failed}",
-                extra={
-                    "success_count": success,
-                    "failed_count": failed,
-                    "index": person_index
-                }
-            )
-        except ConnectionError as e:
-            logger.error(
-                f"Ошибка подключения при загрузке данных в индекс "
-                f"'{person_index}'. Исключение: {e}",
-                extra={"index": person_index, "actions_count": len(actions)}
-            )
-            raise
-        except RequestError as e:
-            logger.error(
-                f"Ошибка запроса при загрузке данных в индекс "
-                f"'{person_index}'. Исключение: {e}",
-                extra={"index": person_index, "actions_count": len(actions)}
-            )
+            # Используем Bulk API для загрузки данных
+            await helpers.async_bulk(self.elastic, actions)
+            logger.info(f"Загрузка завершена. Загружено {len(persons)} персон.")
+        except ConnectionError:
+            logger.error("Ошибка подключения при загрузке данных в Elasticsearch. Попробуем снова...")
             raise
         except Exception as e:
-            logger.error(
-                f"Произошла непредвиденная ошибка при загрузке данных в "
-                f"индекс '{person_index}'. Исключение: {e}",
-                extra={"index": person_index, "actions_count": len(actions)}
-            )
+            logger.error(f"Произошла ошибка при загрузке данных: {e}")
             raise
 
-    async def run_etl(self, films_index: str, person_index: str) -> None:
+    async def run_etl(self, films_index: str, person_index: str):
         """
-        Запускает полный процесс ETL для создания индекса персон.
+        Запускает полный ETL процесс.
 
-        :param films_index: Имя индекса фильмов, из которого извлекаются
-        данные.
-        :param person_index: Имя индекса для хранения данных о персонах.
+        :param films_index: Имя индекса фильмов.
+        :param person_index: Имя индекса персон.
         """
-        logger.info("Запуск ETL процесса...")
+        logger.info("Запуск ETL процесса.")
         try:
-            await self.create_person_index(person_index)
-
-            logger.info(
-                f"Извлечение данных о персонах из индекса '{films_index}'."
-            )
-            persons = []
-            async for person in self.extract_persons(films_index):
-                persons.append(person)
-            logger.info(
-                f"Извлечение данных завершено: извлечено {len(persons)} "
-                f"персон.",
-                extra={
-                    "films_index": films_index,
-                    "persons_count": len(persons)
-                }
-            )
-
-            logger.info(f"Загрузка данных в индекс '{person_index}'.")
-            await self.load_persons(person_index, persons)
-
-            logger.info("ETL процесс успешно завершён.")
+            persons = await self.extract_persons_from_films(films_index)
+            await self.recreate_person_index(person_index)
+            await self.load_persons_to_index(person_index, persons)
+            logger.info("ETL процесс завершён.")
         except Exception as e:
-            logger.error(
-                f"ETL процесс завершился с ошибкой: {e}",
-                extra={
-                    "films_index": films_index,
-                    "person_index": person_index
-                }
-            )
+            logger.error(f"ETL процесс завершился с ошибкой: {e}")
             raise
-
-
-
-
-async def main():
-    """
-    Основная функция для запуска ETL-процесса.
-    """
-    try:
-        # Создание асинхронного клиента Elasticsearch
-        logger.info("Инициализация клиента Elasticsearch...")
-        es_client = AsyncElasticsearch(
-            hosts=[f"http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}"],
-            request_timeout=30,
-        )
-
-        # Проверка соединения с Elasticsearch
-        if not await es_client.ping():
-            raise ConnectionError("Не удалось подключиться к Elasticsearch.")
-
-        # Инициализация ETL-сервиса
-        etl_service = ETLPersonService(elastic=es_client)
-
-        # Запуск ETL-процесса
-        logger.info("Запуск ETL-процесса...")
-        films_index = settings.ELASTIC_INDEX  # Индекс фильмов из настроек
-        person_index = "persons"  # Индекс персон
-
-        await etl_service.run_etl(films_index=films_index, person_index=person_index)
-
-    except ConnectionError as e:
-        logger.error(f"Ошибка подключения к Elasticsearch: {e}")
-    except Exception as e:
-        logger.error(f"Произошла непредвиденная ошибка: {e}", exc_info=True)
-    finally:
-        # Корректное закрытие соединения с Elasticsearch
-        logger.info("Закрытие соединения с Elasticsearch...")
-        if "es_client" in locals() and es_client is not None:
-            await es_client.close()
-        logger.info("Соединение успешно закрыто.")
-
-if __name__ == "__main__":
-    # Запуск асинхронного ETL-процесса
-    asyncio.run(main())

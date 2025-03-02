@@ -14,7 +14,7 @@ class ElasticService:
     def __init__(self, es_client: AsyncElasticsearch):
         self.es_client = es_client
 
-    @with_retry()
+    # @with_retry()
     async def search(self, index: str, query: dict) -> ObjectApiResponse[Any]:
         logger.debug("Попытка выполнить запрос search в Elasticsearch: index=%s, query=%s", index, query)
         try:
@@ -41,6 +41,16 @@ class ElasticService:
                          index, id, str(e))
             raise
 
+    async def index_exists(self, index_name: str) -> bool:
+        """
+        Проверяет, существует ли индекс в Elasticsearch.
+        """
+        try:
+            return await self.es_client.indices.exists(index=index_name)
+        except ApiError as e:
+            logger.error("Ошибка при проверке существования индекса %s: %s", index_name, str(e))
+            raise
+
     async def close(self):
         logger.info("Закрытие соединения с Elasticsearch.")
         try:
@@ -49,3 +59,6 @@ class ElasticService:
         except Exception as e:
             logger.error("Ошибка при закрытии соединения с Elasticsearch: %s", str(e))
             raise
+
+    async def is_connected(self) -> bool:
+        return await self.es_client.ping()

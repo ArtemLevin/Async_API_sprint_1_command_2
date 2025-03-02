@@ -29,6 +29,7 @@ services:
   elasticsearch:
     image: elasticsearch:8.6.2
     environment:
+      - ES_LOG_LEVEL=ERROR
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
