@@ -1,8 +1,9 @@
 import logging
-from elasticsearch import AsyncElasticsearch, ApiError, ConnectionError
-from src.utils.elastic_service import ElasticService
-from src.core.config import Settings
 
+from elasticsearch import ApiError, AsyncElasticsearch, ConnectionError
+
+from src.core.config import Settings
+from src.utils.elastic_service import ElasticService
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

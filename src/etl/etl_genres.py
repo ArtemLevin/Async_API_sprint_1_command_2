@@ -2,7 +2,8 @@ import logging
 
 from elasticsearch import AsyncElasticsearch, helpers
 from elasticsearch.exceptions import ConnectionError, RequestError
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_exponential)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,6 @@ class ETLService:
             # Используем Scroll API для извлечения всех документов из индекса `films`
             async for doc in helpers.async_scan(self.elastic, index=films_index):
                 film_genres = doc["_source"].get("genre", [])
-                print(doc["_source"])
                 for genre in film_genres:
                     if isinstance(genre, dict) and "uuid" in genre and "name" in genre:
                         genres.add((genre["uuid"], genre["name"]))

@@ -1,6 +1,5 @@
-
 import logging
-from typing import List, Optional
+from typing import List
 from uuid import UUID
 
 from src.models.models import FilmRole, Person
@@ -23,7 +22,7 @@ class PersonService(BaseService):
         """
         return f"person:{unique_id}"
 
-    def parse_elastic_response(self, response: dict) -> Optional[Person]:
+    def parse_elastic_response(self, response: dict) -> Person | None:
         """
         Преобразует ответ Elasticsearch в объект Person.
 
@@ -33,11 +32,10 @@ class PersonService(BaseService):
         try:
             # Извлекаем данные из "_source"
             source = response["_source"]
-            print(source)
             # Парсим список фильмов
             films = [
                 FilmRole(
-                    id=film["id"],  # Предполагается, что "uuid" является строкой
+                    id=film["id"],
                     roles=film.get("roles", [])
                 )
                 for film in source.get("films", [])
@@ -80,7 +78,8 @@ class PersonService(BaseService):
         except Exception as e:
             logger.error(f"Ошибка при получении данных о персонах: {e}")
             raise
-    async def get_person_by_id(self, person_id: UUID) -> Optional[Person]:
+
+    async def get_person_by_id(self, person_id: UUID) -> Person | None:
         """
         Получение данных о персоне по её уникальному ID.
 

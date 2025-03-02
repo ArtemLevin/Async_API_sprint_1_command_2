@@ -4,25 +4,20 @@ import random
 from decimal import Decimal
 from uuid import uuid4
 
+from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk
 from faker import Faker
-from elasticsearch import AsyncElasticsearch
 
-# Импортируем модели
 from src.models.models import Film, GenreBase, PersonBase
 from src.utils.elastic_service import ElasticService
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Создание экземпляра клиента Elasticsearch
 es_client = AsyncElasticsearch(["http://elasticsearch:9200"])
 
-# Создание экземпляра класса ElasticService
 elastic_service = ElasticService(es_client)
 
-# Создание экземпляра Faker для генерации фейковых данных
 fake = Faker()
 
 

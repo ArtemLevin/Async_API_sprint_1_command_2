@@ -1,109 +1,40 @@
-import logging
-from http import HTTPStatus
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
-from src.services.film import FilmService, get_film_service
-
-
-logger = logging.getLogger(__name__)
+from src.db.elastic import get_elastic
+from src.db.redis_client import get_redis
+from src.models.models import Film
+from src.services.film_service import FilmService
 
 router = APIRouter()
 
 
-@router.get("/{film_id}")
-async def film_details(
-    film_id: UUID,
-    film_service: FilmService = Depends(get_film_service),
-) -> dict:
+async def get_film_service(
+        elastic=Depends(get_elastic), redis=Depends(get_redis)
+) -> FilmService:
+    return FilmService(elastic, redis, index_name="films")
+
+
+@router.get("/{film_uuid}", response_model=Film)
+async def get_film(
+        film_uuid: UUID, film_service: FilmService = Depends(get_film_service)
+):
     """
-    Эндпоинт для получения информации о фильме по его ID.
+    Эндпоинт для получения информации о фильме по UUID.
     """
-    film_dump = await film_service.get_film_by_id(str(film_id))
-
-    if not film_dump:
-        # Выбрасываем HTTP-исключение с кодом 404
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail="Film not found",
-        )
-
-    return film_dump
+    film = await film_service.get_by_uuid(film_uuid)
+    if not film:
+        raise HTTPException(status_code=404, detail="Фильм не найден")
+    return film
 
 
-@router.get("/search")
-async def search_films(
-    query: str = Query(..., description="Поисковый запрос по фильмам"),
-    page_size: int = Query(
-        10,
-        ge=1,
-        le=100,
-        description="Количество фильмов в результате (от 1 до 100)",
-    ),
-    page_number: int = Query(
-        1,
-        ge=1,
-        description="Смещение для пагинации (неотрицательное число)",
-    ),
-    film_service: FilmService = Depends(get_film_service),
-) -> list[dict] | None:
+@router.get("/", response_model=list[Film])
+async def get_all_films(
+        film_service: FilmService = Depends(get_film_service)
+):
     """
-    Эндпоинт для получения фильмов с поддержкой сортировки по рейтингу,
-    фильтрации по жанру и пагинацией.
+    Получение списка всех фильмов.
     """
-    films_dump = await film_service.search_films(
-        query=query, page_size=page_size, page_number=page_number
-    )
-
-    if not films_dump:
-        # Выбрасываем HTTP-исключение с кодом 404
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail="Films not found",
-        )
-
-    return films_dump
-
-
-@router.get("")
-async def get_films(
-        genre: UUID | None = Query(
-            None, description="UUID жанра для фильтрации"
-        ),
-        sort: str = Query(
-            "-imdb_rating",
-            description="Поле для сортировки (например, '-imdb_rating')",
-        ),
-        page_size: int = Query(
-            10,
-            ge=1,
-            le=100,
-            description="Количество фильмов в результате (от 1 до 100)",
-        ),
-        page_number: int = Query(
-            0,
-            ge=0,
-            description="Смещение для пагинации (неотрицательное число)",
-        ),
-        film_service: FilmService = Depends(get_film_service),
-) -> list[dict] | None:
-    """
-    Эндпоинт для получения фильмов с поддержкой сортировки по рейтингу,
-    фильтрации по жанру и пагинацией.
-    """
-    films_dump = await film_service.get_films(
-        sort=sort,
-        genre=str(genre),
-        page_size=page_size,
-        page_number=page_number,
-    )
-
-    if not films_dump:
-        # Выбрасываем HTTP-исключение с кодом 404
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail="Films not found",
-        )
-
-    return films_dump
+    films = await film_service.get_all_films()
+    return films

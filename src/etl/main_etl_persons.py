@@ -1,11 +1,11 @@
 import asyncio
+import logging.config
+
 from elasticsearch import AsyncElasticsearch
+
+from src.core.config import settings
 from src.core.logger import LOGGING
 from src.etl.etl_persons import ETLPersonService
-from src.core.config import settings
-
-
-import logging.config
 
 logging.config.dictConfig(LOGGING)
 logger = logging.getLogger(__name__)

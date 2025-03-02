@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List
 from uuid import UUID
 
 from src.models.models import Genre
@@ -69,7 +69,7 @@ class GenreService(BaseService):
             logger.error(f"Ошибка при получении жанров: {e}")
             raise
 
-    async def get_genre_by_id(self, genre_id: UUID) -> Optional[dict]:
+    async def get_genre_by_id(self, genre_id: UUID) -> dict | None:
         """
         Получение данных о жанре по его уникальному ID.
 

@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, ValidationError
+
 from src.core.exceptions import CacheServiceError, ElasticServiceError
 
 logger = logging.getLogger(__name__)
@@ -57,8 +58,9 @@ class BaseService(ABC):
 
         # Если данных в кэше нет, запрос в Elasticsearch
         logger.info(f"Данные для UUID '{unique_id}' не найдены в кэше. Выполняется запрос в Elasticsearch.")
-        query = {"query": {"term": {"id": str(unique_id)}}}
+        query = {"query": {"term": {"uuid.keyword": str(unique_id)}}}
         try:
+
             response = await self.elastic_service.search(index=self.index_name, body=query)
             hits = response.get("hits", {}).get("hits", [])
             if not hits:

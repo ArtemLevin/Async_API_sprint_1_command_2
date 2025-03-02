@@ -9,3 +9,4 @@ pydantic-settings==2.8.1
 
 pydantic~=2.10.6
 more-itertools~=10.6.0
+elastic-transport~=8.17.0

@@ -1,7 +1,6 @@
 from uuid import UUID
 
-from fastapi import Depends
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.db.elastic import get_elastic
 from src.db.redis_client import get_redis

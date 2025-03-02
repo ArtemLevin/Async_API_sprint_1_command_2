@@ -1,7 +1,6 @@
-from src.utils.decorators import with_retry
 import logging
-from redis.asyncio import Redis
 
+from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ class CacheService:
         logger.info("Инициализация CacheService: cache_expire=%d", self.cache_expire)
 
     # @with_retry()
-    async def get(self, key: str) -> str|None:
+    async def get(self, key: str) -> str | None:
         logger.debug("Попытка получить значение из кеша: key=%s", key)
         try:
             value = await self.redis_client.get(key)

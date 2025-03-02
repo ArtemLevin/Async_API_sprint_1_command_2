@@ -2,10 +2,9 @@ import logging
 from typing import Any
 
 from elastic_transport import ObjectApiResponse, TransportError
-from elasticsearch import AsyncElasticsearch, ApiError
+from elasticsearch import ApiError, AsyncElasticsearch
 
 from src.core.exceptions import ElasticServiceError
-from src.utils.decorators import with_retry
 
 logger = logging.getLogger(__name__)
 

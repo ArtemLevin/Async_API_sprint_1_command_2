@@ -1,16 +1,15 @@
 import logging
+
 from elasticsearch import AsyncElasticsearch
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 from redis.asyncio import Redis
 
 from src.api.v1 import films
-from src.api.v1.persons import router as persons_router
 from src.api.v1.genres import router as genres_router
+from src.api.v1.persons import router as persons_router
 from src.core.config import settings
 from src.db import elastic, redis_client
-
-
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

@@ -1,6 +1,7 @@
 from redis.asyncio import Redis
-from src.utils.cache_service import CacheService
+
 from src.core.config import Settings
+from src.utils.cache_service import CacheService
 
 settings = Settings()
 
