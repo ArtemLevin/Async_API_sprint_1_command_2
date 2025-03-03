@@ -1,8 +1,9 @@
 version: "3.8"
 
 services:
-  async_api:
-    build: .
+  app:
+    build: ../../.
+#    image: fastapi-image   /for production container testing
     ports:
       - "8000:8000"
     depends_on:
@@ -15,12 +16,12 @@ services:
 
   redis:
     image: redis:6.2
-    expose:
-      - "6379"
+    ports:
+      - "6379:6379"
     env_file:
-      - ./.env
+      - ../../.env
     healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       retries: 5
       start_period: 30s
@@ -29,22 +30,30 @@ services:
   elasticsearch:
     image: elasticsearch:8.6.2
     environment:
-      - ES_LOG_LEVEL=ERROR
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
-    expose:
-      - "9200"
+    ports:
+      - "9200:9200"
     env_file:
-      - ./.env
+      - ../../.env
     healthcheck:
-      test: [ "CMD-SHELL", "curl -s http://elasticsearch:9200 >/dev/null || exit 1" ]
+      test: ["CMD-SHELL", "curl --silent --fail localhost:9200 || exit 1"]
       interval: 10s
       retries: 5
       start_period: 120s
       timeout: 10s
     volumes:
       - es_data:/usr/share/elasticsearch/data
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.tests
+#    image: fastapi-image   /for production container testing
+    volumes:
+      - .:/app
+      - ./tests:/tests
 
 volumes:
   es_data:

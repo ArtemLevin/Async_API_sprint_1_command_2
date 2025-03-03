@@ -64,3 +64,4 @@ Thumbs.db
 .DS_Store
 
 cleanup_docker.sh
+create_test_structure.sh

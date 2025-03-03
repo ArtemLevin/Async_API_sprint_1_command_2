@@ -1,0 +1,17 @@
+FROM python:3.10
+
+WORKDIR /app
+
+COPY ./tests/functional/requirements.txt /app/
+RUN pip install -r /app/requirements.txt
+
+COPY ./src /app/src
+COPY ./tests /app/tests
+
+RUN pip install pytest
+
+COPY ./tests/functional/utils/wait_for_es.py /app/tests/functional/utils/wait_for_es.py
+COPY ./tests/functional/utils/wait_for_redis.py /app/tests/functional/utils/wait_for_redis.py
+
+ENTRYPOINT ["sh", "-c", "python3 /app/tests/functional/utils/wait_for_es.py && python3
+            /app/tests/functional/utils/wait_for_redis.py && pytest /app/tests/functional/src"]
