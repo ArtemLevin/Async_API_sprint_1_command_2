@@ -119,3 +119,43 @@ class FilmService(BaseService):
         except Exception as e:
             logger.error(f"Ошибка при поиске фильма с ID {film_id}: {e}")
             raise
+
+    async def search_films_by_title(self, query: str, page_size: int = 10, page_number: int = 1) -> List[Film]:
+        """
+        Поиск фильмов по названию.
+
+        :param query: Строка для поиска (название фильма).
+        :param page_size: Количество результатов на странице.
+        :param page_number: Номер страницы.
+        :return: Список объектов Film.
+        """
+        try:
+            # Формируем запрос для поиска по названию фильма
+            search_query = {
+                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
+                "size": page_size,                     # Пагинация: размер страницы
+                "query": {
+                    "match": {
+                        "title": query                 # Ищем по полю "title"
+                    }
+                }
+            }
+
+            logger.info(f"Выполняем поиск фильмов по запросу: {query}")
+
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic_service.search(index="films", body=search_query)
+
+            # Фильтруем только успешные результаты
+            films = [
+                self.parse_elastic_response(hit)
+                for hit in response.get("hits", {}).get("hits", [])
+                if self.parse_elastic_response(hit) is not None
+            ]
+
+            logger.info(f"Найдено {len(films)} фильмов по запросу '{query}'.")
+            return films
+
+        except Exception as e:
+            logger.error(f"Ошибка при поиске фильмов по запросу '{query}': {e}")
+            raise

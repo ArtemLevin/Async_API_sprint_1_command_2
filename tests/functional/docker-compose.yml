@@ -3,7 +3,6 @@ version: "3.8"
 services:
   app:
     build: ../../.
-#    image: fastapi-image   /for production container testing
     ports:
       - "8000:8000"
     depends_on:
@@ -13,6 +12,13 @@ services:
         condition: service_healthy
     env_file:
       - ./.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+
 
   redis:
     image: redis:6.2
@@ -50,10 +56,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-#    image: fastapi-image   /for production container testing
-    volumes:
-      - .:/app
-      - ./tests:/tests
+    environment:
+      PYTHONPATH: /app
+    depends_on:
+      app:
+        condition: service_healthy
 
 volumes:
   es_data:

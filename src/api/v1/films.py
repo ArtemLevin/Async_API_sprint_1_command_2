@@ -38,3 +38,4 @@ async def get_all_films(
     """
     films = await film_service.get_all_films()
     return films
+

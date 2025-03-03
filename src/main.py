@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from src.api.v1 import films
 from src.api.v1.genres import router as genres_router
 from src.api.v1.persons import router as persons_router
+from src.api.v1.search import router as search_router
 from src.core.config import settings
 from src.db import elastic, redis_client
 
@@ -79,7 +80,12 @@ async def shutdown():
         logger.error(f"Ошибка при закрытии подключения к Elasticsearch: {e}")
 
 
+@app.get("/health", status_code=200)
+def health():
+    return {"status": "OK"}
+
 # Подключение роутеров
 app.include_router(films.router, prefix='/api/v1/films', tags=['films'])
 app.include_router(persons_router, prefix="/api/v1/persons", tags=["persons"])
 app.include_router(genres_router, prefix="/api/v1/genres", tags=["genres"])
+app.include_router(search_router, prefix="/api/v1/search", tags=["search"])

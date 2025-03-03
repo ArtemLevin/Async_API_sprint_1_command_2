@@ -15,7 +15,7 @@ es: AsyncElasticsearch | None = None
 
 async def get_elastic() -> ElasticService:
     global es
-    if not es or not es.ping():  # Проверка, существует ли es и активно ли соединение
+    if not es or not await es.ping():  # Проверка, существует ли es и активно ли соединение
         logger.info("Создание клиента Elasticsearch...")
         es_client = None
         try:
