@@ -49,7 +49,7 @@ services:
   tests:
     build:
       context: .
-      dockerfile: Dockerfile.tests
+      dockerfile: Dockerfile
 #    image: fastapi-image   /for production container testing
     volumes:
       - .:/app
