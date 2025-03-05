@@ -13,6 +13,7 @@ COPY . /app/tests/functional
 # Копирование скриптов ожидания
 COPY ./utils/wait_for_es.py /app/tests/functional/utils/wait_for_es.py
 COPY ./utils/wait_for_redis.py /app/tests/functional/utils/wait_for_redis.py
+COPY ./utils/wait_for_service.py /app/tests/functional/utils/wait_for_service.py
 
 # Копирование entrypoint
 COPY entrypoint.sh /app/entrypoint.sh
@@ -20,3 +21,4 @@ RUN chmod +x /app/entrypoint.sh
 
 # Точка входа
 ENTRYPOINT ["/app/entrypoint.sh"]
+

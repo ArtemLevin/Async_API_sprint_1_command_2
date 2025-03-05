@@ -1,22 +1,21 @@
 import logging
-
 from uuid import uuid4
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
-
 from tests.functional.es_mapping import ESIndexMapping, get_es_index_mapping
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+APP_IP = 'app'
 
 class TestSettings(BaseSettings):
     # Константы для переменных окружения
     ELASTIC_HOST: str = "http://elasticsearch:9200"
     REDIS_HOST: str = "http://redis:6379"
-    SERVICE_URL: str = "http://app:8000"
+    SERVICE_URL: str = f"http://{APP_IP}:8000"
 
     # Поля настроек
     es_host: str = Field(default=ELASTIC_HOST, json_schema_extra={'env': 'ELASTIC_HOST'})

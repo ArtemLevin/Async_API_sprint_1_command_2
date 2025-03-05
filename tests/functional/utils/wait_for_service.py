@@ -1,5 +1,8 @@
 import time
+
 import requests
+from tests.functional.settings import test_settings
+
 
 def wait_for_service(url, timeout=30):
     start_time = time.time()
@@ -18,5 +21,5 @@ def wait_for_service(url, timeout=30):
         time.sleep(1)
 
 if __name__ == "__main__":
-    url = "http://app:8000"
+    url = test_settings.service_url + "/health"
     wait_for_service(url)
