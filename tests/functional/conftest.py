@@ -125,3 +125,24 @@ async def load_bulk_data_to_es(es_client, generate_film_data):
         raise Exception(f"Не удалось загрузить {len(failed)} записей: {failed}")
 
     return es_data
+
+@pytest.fixture
+async def fetch_api_response():
+    """
+    Фикстура для выполнения GET-запросов к API.
+
+    :return: Функция для выполнения GET-запроса.
+    """
+    async def _fetch(session, url, query_data):
+        """
+        Выполняет GET-запрос.
+
+        :param session: Экземпляр aiohttp.ClientSession.
+        :param url: URL для запроса.
+        :param query_data: Параметры запроса.
+        :return: Тело ответа, заголовки и статус.
+        """
+        async with session.get(url, params=query_data) as response:
+            return response
+
+    return _fetch
