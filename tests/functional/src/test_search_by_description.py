@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "query_data",
-    [{"search": "The Star", "page_size": 5, "page_number": 1}]  # Параметры поиска
+    [{"search": "New World", "page_size": 5, "page_number": 1}]  # Параметры поиска
 )
-async def test_search(es_client, load_bulk_data_to_es, query_data):
+async def test_search_by_description(es_client, load_bulk_data_to_es, query_data):
     """
     Тест проверяет поиск фильмов через Elasticsearch и API.
     """
@@ -34,7 +34,7 @@ async def test_search(es_client, load_bulk_data_to_es, query_data):
 
         # Создаем HTTP-сессию
         async with aiohttp.ClientSession() as session:
-            url = f"{test_settings.SERVICE_URL}/api/v1/search/films_by_title"
+            url = f"{test_settings.SERVICE_URL}/api/v1/search/films_by_description"
             response = await session.get(url, params=query_data)
             body = await response.json()
             status = response.status

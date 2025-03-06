@@ -93,7 +93,7 @@ async def load_bulk_data_to_es(es_client, generate_film_data):
     :return: Загруженные данные фильмов.
     """
     index_name = test_settings.es_index
-    count = 50  # Можно задать другое значение в тесте, если нужно
+    count = 5  # Можно задать другое значение в тесте, если нужно
 
     # Генерируем данные фильмов
     es_data = generate_film_data(count=count)
