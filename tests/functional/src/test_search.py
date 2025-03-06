@@ -42,7 +42,7 @@ def generate_film_data() -> dict:
 
 
 @pytest.mark.asyncio
-async def test_search():
+async def test_search(es_client):
     logger.info("Начало теста: test_search")
 
     try:
@@ -51,28 +51,27 @@ async def test_search():
         es_data = [generate_film_data() for _ in range(50)]
 
         # 2. Загрузка данных в Elasticsearch
-        async with AsyncElasticsearch(hosts=test_settings.es_host, verify_certs=False) as es_client:
-            try:
-                if await es_client.indices.exists(index=test_settings.es_index):
-                    await es_client.indices.delete(index=test_settings.es_index)
-                await es_client.indices.create(index=test_settings.es_index, **test_settings.es_index_mapping)
-            except Exception as e:
-                logger.error(f"Ошибка при работе с индексом: {e}")
-                raise
+        try:
+            if await es_client.indices.exists(index=test_settings.es_index):
+                await es_client.indices.delete(index=test_settings.es_index)
+            await es_client.indices.create(index=test_settings.es_index, **test_settings.es_index_mapping)
+        except Exception as e:
+            logger.error(f"Ошибка при работе с индексом: {e}")
+            raise
 
-            bulk_query = [
-                {
-                    '_index': 'films',
-                    '_id': row['uuid'],
-                    '_source': row
-                }
-                for row in es_data
-            ]
-            success, failed = await async_bulk(client=es_client, actions=bulk_query, refresh='wait_for',  raise_on_error=False, )
-            if failed:
-                logger.error(f"Не удалось загрузить {len(failed)} записей: {failed}")
-                raise Exception("Ошибка записи данных в Elasticsearch")
-            logger.info(f"Успешно загружено {success} записей.")
+        bulk_query = [
+            {
+                '_index': 'films',
+                '_id': row['uuid'],
+                '_source': row
+            }
+            for row in es_data
+        ]
+        success, failed = await async_bulk(client=es_client, actions=bulk_query, refresh='wait_for',  raise_on_error=False, )
+        if failed:
+            logger.error(f"Не удалось загрузить {len(failed)} записей: {failed}")
+            raise Exception("Ошибка записи данных в Elasticsearch")
+        logger.info(f"Успешно загружено {success} записей.")
 
         # 3. Запрос к API
         await asyncio.sleep(3)
@@ -99,3 +98,5 @@ async def test_search():
 async def fetch_api_response(session, url, query_data):
     async with session.get(url, params=query_data) as response:
         return await response.json(), response.headers, response.status
+
+

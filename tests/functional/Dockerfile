@@ -7,7 +7,6 @@ COPY ./requirements.txt /app/
 RUN pip install -r /app/requirements.txt pytest
 
 # Копирование исходного кода и тестов
-COPY ../src /app/src
 COPY . /app/tests/functional
 
 # Копирование скриптов ожидания
