@@ -1,40 +1,31 @@
-import asyncio
-import logging
 import uuid
-
 import aiohttp
 import pytest
-from elasticsearch import AsyncElasticsearch
-from elasticsearch.helpers import async_bulk
+import logging
 from tests.functional.settings import test_settings
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "query_data",
-    [{"search": "The Star", "page_size": 5, "page_number": 1}]  # Параметры поиска
+    [{"search": "Action", "page_size": 5, "page_number": 1}]  # Параметры поиска по названию жанра
 )
-async def test_search(es_client, load_bulk_data_to_es, query_data):
+async def test_search_by_genre(es_client, load_bulk_data_to_es, query_data):
     """
-    Тест проверяет поиск фильмов через Elasticsearch и API.
+    Тест проверяет поиск фильмов по названию жанра через Elasticsearch и API.
     """
-    logger.info("Начало теста: test_search")
+    logger.info("Начало теста: test_search_by_genre")
 
     try:
-        # Массовая загрузка данных
+        # Массовая загрузка данных в Elasticsearch
         logger.info("Массовая загрузка данных в Elasticsearch")
         es_data = await load_bulk_data_to_es
         logger.info(f"Успешно загружено {len(es_data)} фильмов в индекс {test_settings.es_index}.")
 
-        # Создаем HTTP-сессию
+        # Создаем HTTP-сессию для запроса к API
         async with aiohttp.ClientSession() as session:
-            url = f"{test_settings.SERVICE_URL}/api/v1/search/films_by_title"
+            url = f"{test_settings.SERVICE_URL}/api/v1/search/films_by_genre"
             response = await session.get(url, params=query_data)
             body = await response.json()
             status = response.status
