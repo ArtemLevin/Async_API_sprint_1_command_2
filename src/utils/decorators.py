@@ -32,15 +32,9 @@ def redis_cache(key_prefix: str = "cache"):
                 return json.loads(cached_data)
 
             result = await func(self, *args, **kwargs)
-            if isinstance(result, list):
-                for item in result:
-                    serialized = json.dumps(model_to_dict(item))
-                    await redis_instance.set(key, serialized)
-                    log.info("Результаты сохранены в кэше.")
-            else:
-                serialized = json.dumps(model_to_dict(result))
-                await redis_instance.set(key, serialized)
-                log.info("Результаты сохранены в кэше.")
+            serialized = json.dumps([model_to_dict(film) for film in result])
+            await redis_instance.set(key, serialized)
+            log.info("Результаты сохранены в кэше.")
             return result
 
         return wrapper
