@@ -5,6 +5,7 @@ from uuid import UUID
 
 from src.models.models import Film, GenreBase, PersonBase
 from src.services.base_service import BaseService
+from src.utils.decorators import redis_cache
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,9 @@ class FilmService(BaseService):
     """
     Сервис для работы с данными о фильмах.
     """
+    def __init__(self, elastic_service, cache_service, index_name: str):
+        super().__init__(elastic_service, cache_service, index_name)
+        self.logger = logging.getLogger(__name__)
 
     def get_cache_key(self, unique_id: UUID) -> str:
         """
@@ -120,6 +124,7 @@ class FilmService(BaseService):
             logger.error(f"Ошибка при поиске фильма с ID {film_id}: {e}")
             raise
 
+    @redis_cache(key_prefix="films")
     async def search_films_by_title(self, query: str, page_size: int = 10, page_number: int = 1) -> List[Film]:
         """
         Поиск фильмов по названию.
@@ -158,4 +163,229 @@ class FilmService(BaseService):
 
         except Exception as e:
             logger.error(f"Ошибка при поиске фильмов по запросу '{query}': {e}")
+            raise
+
+
+    async def search_films_by_description(self, query: str, page_size: int = 10, page_number: int = 1) -> List[Film]:
+        """
+        Поиск фильмов по названию.
+
+        :param query: Строка для поиска (description).
+        :param page_size: Количество результатов на странице.
+        :param page_number: Номер страницы.
+        :return: Список объектов Film.
+        """
+        try:
+            # Формируем запрос для поиска по названию фильма
+            search_query = {
+                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
+                "size": page_size,                     # Пагинация: размер страницы
+                "query": {
+                    "match": {
+                        "description": query                 # Ищем по полю "description"
+                    }
+                }
+            }
+
+            logger.info(f"Выполняем поиск фильмов по запросу: {query}")
+
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic_service.search(index="films", body=search_query)
+
+            # Фильтруем только успешные результаты
+            films = [
+                self.parse_elastic_response(hit)
+                for hit in response.get("hits", {}).get("hits", [])
+                if self.parse_elastic_response(hit) is not None
+            ]
+
+            logger.info(f"Найдено {len(films)} фильмов по запросу '{query}'.")
+            return films
+
+        except Exception as e:
+            logger.error(f"Ошибка при поиске фильмов по запросу '{query}': {e}")
+            raise
+
+
+    async def search_films_by_actor(self, actor_name: str, page_size: int = 10, page_number: int = 1) -> List[Film]:
+        """
+        Поиск фильмов по имени актёра.
+
+        :param actor_name: Строка для поиска (full_name актёра).
+        :param page_size: Количество результатов на странице.
+        :param page_number: Номер страницы.
+        :return: Список объектов Film.
+        """
+        try:
+            # Формируем запрос для поиска по имени актёра
+            search_query = {
+                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
+                "size": page_size,  # Пагинация: размер страницы
+                "query": {
+                    "nested": {
+                        "path": "actors",  # указываем путь к вложенному объекту
+                        "query": {
+                            "match": {
+                                "actors.full_name": actor_name  # выполняем поиск по имени актёра
+                            }
+                        }
+                    }
+                }
+            }
+
+            logger.info(f"Выполняем поиск фильмов с актёром: {actor_name}")
+
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic_service.search(index="films", body=search_query)
+
+            # Обрабатываем и фильтруем результаты запроса
+            films = [
+                self.parse_elastic_response(hit)
+                for hit in response.get("hits", {}).get("hits", [])
+                if self.parse_elastic_response(hit) is not None
+            ]
+
+            logger.info(f"Найдено {len(films)} фильмов с актёром '{actor_name}'.")
+            return films
+
+        except Exception as e:
+            logger.error(f"Ошибка при поиске фильмов по имени актёра '{actor_name}': {e}")
+            raise
+
+
+    async def search_films_by_writer(self, writer_name: str, page_size: int = 10, page_number: int = 1) -> List[Film]:
+        """
+        Поиск фильмов по имени сценариста (writer).
+
+        :param writer_name: Строка для поиска (full_name сценариста).
+        :param page_size: Количество результатов на странице.
+        :param page_number: Номер страницы.
+        :return: Список объектов Film.
+        """
+        try:
+            # Формируем запрос с использованием nested-запроса для поля "writers"
+            search_query = {
+                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
+                "size": page_size,                      # Пагинация: размер страницы
+                "query": {
+                    "nested": {
+                        "path": "writers",  # Указываем путь к вложенному объекту "writers"
+                        "query": {
+                            "match": {
+                                "writers.full_name": writer_name  # Поиск по полю "writers.full_name"
+                            }
+                        }
+                    }
+                }
+            }
+
+            logger.info(f"Выполняем поиск фильмов с сценаристом: {writer_name}")
+
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic_service.search(index="films", body=search_query)
+
+            # Обрабатываем результаты запроса
+            films = [
+                self.parse_elastic_response(hit)
+                for hit in response.get("hits", {}).get("hits", [])
+                if self.parse_elastic_response(hit) is not None
+            ]
+
+            logger.info(f"Найдено {len(films)} фильмов с сценаристом '{writer_name}'.")
+            return films
+
+        except Exception as e:
+            logger.error(f"Ошибка при поиске фильмов по имени сценариста '{writer_name}': {e}")
+            raise
+
+
+    async def search_films_by_director(self, director_name: str, page_size: int = 10, page_number: int = 1) -> List[Film]:
+        """
+        Поиск фильмов по имени режиссёра (director).
+
+        :param director_name: Строка для поиска (full_name режиссёра).
+        :param page_size: Количество результатов на странице.
+        :param page_number: Номер страницы.
+        :return: Список объектов Film.
+        """
+        try:
+            # Формируем запрос с использованием nested-запроса для поля "directors"
+            search_query = {
+                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
+                "size": page_size,                      # Пагинация: размер страницы
+                "query": {
+                    "nested": {
+                        "path": "directors",  # указываем путь к вложенному объекту "directors"
+                        "query": {
+                            "match": {
+                                "directors.full_name": director_name  # поиск по полю "directors.full_name"
+                            }
+                        }
+                    }
+                }
+            }
+
+            logger.info(f"Выполняем поиск фильмов с режиссёром: {director_name}")
+
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic_service.search(index="films", body=search_query)
+
+            # Обрабатываем результаты запроса
+            films = [
+                self.parse_elastic_response(hit)
+                for hit in response.get("hits", {}).get("hits", [])
+                if self.parse_elastic_response(hit) is not None
+            ]
+
+            logger.info(f"Найдено {len(films)} фильмов с режиссёром '{director_name}'.")
+            return films
+
+        except Exception as e:
+            logger.error(f"Ошибка при поиске фильмов по имени режиссёра '{director_name}': {e}")
+            raise
+
+
+    async def search_films_by_genre(self, genre_name: str, page_size: int = 10, page_number: int = 1) -> List[Film]:
+        """
+        Поиск фильмов по названию жанра.
+
+        :param genre_name: Строка для поиска (название жанра, поле genre.name).
+        :param page_size: Количество результатов на странице.
+        :param page_number: Номер страницы.
+        :return: Список объектов Film.
+        """
+        try:
+            # Формируем запрос с использованием nested-запроса по полю "genre"
+            search_query = {
+                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
+                "size": page_size,                      # Пагинация: размер страницы
+                "query": {
+                    "nested": {
+                        "path": "genre",  # указываем путь к вложенному объекту "genre"
+                        "query": {
+                            "match": {
+                                "genre.name": genre_name  # Поиск по полю "genre.name"
+                            }
+                        }
+                    }
+                }
+            }
+
+            logger.info(f"Выполняем поиск фильмов с жанром: {genre_name}")
+
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic_service.search(index="films", body=search_query)
+
+            # Обрабатываем результаты запроса
+            films = [
+                self.parse_elastic_response(hit)
+                for hit in response.get("hits", {}).get("hits", [])
+                if self.parse_elastic_response(hit) is not None
+            ]
+
+            logger.info(f"Найдено {len(films)} фильмов с жанром '{genre_name}'.")
+            return films
+
+        except Exception as e:
+            logger.error(f"Ошибка при поиске фильмов по жанру '{genre_name}': {e}")
             raise

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = Field("movies", env="PROJECT_NAME")
 
     # Конфигурация Redis
-    REDIS_HOST: str = Field("127.0.0.1", env="REDIS_HOST")
+    REDIS_HOST: str = Field("redis", env="REDIS_HOST")
     REDIS_PORT: int = Field(6379, env="REDIS_PORT")
 
     # Конфигурация Elasticsearch
