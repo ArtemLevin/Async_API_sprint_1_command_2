@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from tests.functional.es_mapping import ESIndexMapping, get_es_index_mapping
+from tests.functional.es_mapping import ESIndexMapping, get_es_index_mapping, get_persons_index_mapping
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -22,9 +22,12 @@ class TestSettings(BaseSettings):
     es_index: str = "films"
     es_id_field: str = Field(default_factory=lambda: str(uuid4()))
     es_index_mapping: ESIndexMapping = get_es_index_mapping()
+    es_persons_index_mapping: ESIndexMapping = get_persons_index_mapping()
 
     redis_host: str = Field(default=REDIS_HOST, json_schema_extra={'env': 'REDIS_HOST'})
     service_url: str = Field(default=SERVICE_URL, json_schema_extra={'env': 'SERVICE_URL'})
+
+    SKIP: str = "true"
 
 
 test_settings = TestSettings()

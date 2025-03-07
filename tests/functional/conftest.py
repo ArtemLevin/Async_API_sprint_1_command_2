@@ -146,3 +146,83 @@ async def fetch_api_response():
             return response
 
     return _fetch
+
+
+@pytest.fixture
+def generate_person_data():
+    """
+    Фикстура для генерации данных персоны.
+    Может создавать одну или несколько персон.
+
+    :return: Функция-генератор данных персоны.
+    """
+    def _generate_person_data(count=1):
+        """
+        Генерирует указанное количество персон.
+
+        :param count: Количество персон.
+        :return: Список данных персон (если count > 1) или одна персона.
+        """
+        persons = []
+        for _ in range(count):
+            person = {
+                "uuid": str(uuid.uuid4()),
+                "full_name": "John Doe",
+                "films": [
+                    {
+                        "uuid": str(uuid.uuid4()),
+                        "roles": ["actor", "director"]
+                    },
+                    {
+                        "uuid": str(uuid.uuid4()),
+                        "roles": ["writer"]
+                    }
+                ]
+            }
+            persons.append(person)
+        return persons if count > 1 else persons[0]
+
+    return _generate_person_data
+
+@pytest.fixture
+async def load_bulk_data_to_persons_es(es_client, generate_person_data):
+    """
+    Асинхронная фикстура для массовой загрузки данных фильмов в Elasticsearch.
+
+    :param es_client: Асинхронный клиент Elasticsearch.
+    :param generate_person_data: Фикстура для генерации данных фильмов.
+    :return: Загруженные данные фильмов.
+    """
+    index_name = 'persons'
+    count = 5  # Можно задать другое значение в тесте, если нужно
+
+    # Генерируем данные фильмов
+    es_data = generate_person_data(count=count)
+
+    # Удаляем индекс, если он существует
+    if await es_client.indices.exists(index=index_name):
+        await es_client.indices.delete(index=index_name)
+
+    # Создаем индекс с маппингом
+    await es_client.indices.create(index=index_name, body=test_settings.es_index_mapping)
+
+    # Формируем bulk-запрос
+    bulk_query = [
+        {
+            '_index': index_name,
+            '_id': person['uuid'],
+            '_source': person
+        }
+        for person in es_data
+    ]
+
+    # Выполняем bulk-запрос
+    success, failed = await async_bulk(
+        client=es_client,
+        actions=bulk_query,
+        refresh='wait_for'
+    )
+    if failed:
+        raise Exception(f"Не удалось загрузить {len(failed)} записей: {failed}")
+
+    return es_data

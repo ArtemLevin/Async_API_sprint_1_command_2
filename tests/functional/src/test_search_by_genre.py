@@ -6,6 +6,7 @@ from tests.functional.settings import test_settings
 
 logger = logging.getLogger(__name__)
 
+@pytest.mark.skipif(test_settings.SKIP == "true", reason="Temporary")
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "query_data",

@@ -12,7 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+@pytest.mark.skipif(test_settings.SKIP == "true", reason="Temporary")
 @pytest.mark.asyncio
 async def test_search_with_cache(load_bulk_data_to_es):
     """

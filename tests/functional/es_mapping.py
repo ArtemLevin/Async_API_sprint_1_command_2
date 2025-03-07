@@ -5,6 +5,7 @@ ESIndexMapping = TypedDict('ESIndexMapping', {
     'settings': dict
 })
 
+
 def get_es_index_mapping() -> ESIndexMapping:
     return {
         "mappings": {
@@ -41,6 +42,51 @@ def get_es_index_mapping() -> ESIndexMapping:
                     },
                 },
                 "imdb_rating": {"type": "float"},
+            }
+        },
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+        },
+    }
+
+
+def get_persons_index_mapping() -> ESIndexMapping:
+    return {
+        "mappings": {
+            "properties": {
+                "uuid": {
+                    "type": "keyword",
+                    "description": "Уникальный идентификатор персоны"
+                },
+                "full_name": {
+                    "type": "text",
+                    "description": "Полное имя персоны",
+                    "fields": {
+                        "raw": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "films": {
+                    "type": "nested",
+                    "description": "Роли персоны в фильмах",
+                    "properties": {
+                        "uuid": {
+                            "type": "keyword",
+                            "description": "Уникальный идентификатор фильма"
+                        },
+                        "roles": {
+                            "type": "nested",
+                            "description": "Роли персоны в фильме",
+                            "properties": {
+                                "role": {
+                                    "type": "keyword"
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         "settings": {

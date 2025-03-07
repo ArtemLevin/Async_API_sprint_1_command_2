@@ -35,7 +35,7 @@ class PersonService(BaseService):
             # Парсим список фильмов
             films = [
                 FilmRole(
-                    id=film["id"],
+                    id=film["uuid"],
                     roles=film.get("roles", [])
                 )
                 for film in source.get("films", [])
@@ -43,8 +43,8 @@ class PersonService(BaseService):
 
             # Создаем объект Person
             return Person(
-                id=UUID(source["id"]),  # Преобразуем строку в UUID
-                full_name=source["name"],
+                id=UUID(source["uuid"]),  # Преобразуем строку в UUID
+                full_name=source["full_name"],
                 films=films
             )
 
@@ -111,4 +111,45 @@ class PersonService(BaseService):
 
         except Exception as e:
             logger.error(f"Ошибка при поиске персоны с ID {person_id}: {e}")
+            raise
+
+
+    async def search_persons_by_full_name(self, query: str, page_size: int = 10, page_number: int = 1) -> List[Person]:
+        """
+        Поиск фильмов по названию.
+
+        :param query: Строка для поиска (название фильма).
+        :param page_size: Количество результатов на странице.
+        :param page_number: Номер страницы.
+        :return: Список объектов Film.
+        """
+        try:
+            # Формируем запрос для поиска по названию фильма
+            search_query = {
+                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
+                "size": page_size,                     # Пагинация: размер страницы
+                "query": {
+                    "match": {
+                        "full_name": query                 # Ищем по полю "full_name"
+                    }
+                }
+            }
+
+            logger.info(f"Выполняем поиск фильмов по запросу: {query}")
+
+            # Выполняем запрос к Elasticsearch
+            response = await self.elastic_service.search(index="persons", body=search_query)
+
+            # Фильтруем только успешные результаты
+            persons = [
+                self.parse_elastic_response(hit)
+                for hit in response.get("hits", {}).get("hits", [])
+                if self.parse_elastic_response(hit) is not None
+            ]
+
+            logger.info(f"Найдено {len(persons)} фильмов по запросу '{query}'.")
+            return persons
+
+        except Exception as e:
+            logger.error(f"Ошибка при поиске фильмов по запросу '{query}': {e}")
             raise
