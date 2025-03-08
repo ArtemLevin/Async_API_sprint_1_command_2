@@ -1,11 +1,12 @@
 import logging
-from elasticsearch import AsyncElasticsearch, helpers, ConnectionError, RequestError
+from typing import Dict, List
 
+from elasticsearch import ConnectionError, RequestError, helpers
 from more_itertools import chunked
-from typing import List, Dict
 
 from src.core.config import Settings
 from src.utils.convert import convert_decimals
+from src.utils.elastic_service import ElasticService
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ BULK_CHUNK_SIZE = 10  # Максимальное количество докум
 
 
 class AddFilmService:
-    def __init__(self, elastic: AsyncElasticsearch):
+    def __init__(self, elastic: ElasticService):
         if elastic is None:
             raise RuntimeError("Elasticsearch клиент не инициализирован")
         self.elastic = elastic
@@ -34,7 +35,10 @@ class AddFilmService:
                 id=film_id,
                 body=film_data,
             )
-            logger.info("Фильм успешно добавлен в индекс %s: %s", settings.ELASTIC_INDEX, film_id)
+            logger.info(
+                "Фильм успешно добавлен в индекс %s: %s",
+                settings.ELASTIC_INDEX, film_id
+            )
 
         except ConnectionError as e:
             logger.error("Ошибка подключения к Elasticsearch: %s", e)
@@ -48,11 +52,13 @@ class AddFilmService:
 
     async def bulk_add_films(self, films: List[Dict]) -> None:
         """
-        Добавить несколько фильмов в Elasticsearch одновременно (bulk-операция).
+        Добавить несколько фильмов в Elasticsearch одновременно
+        (bulk-операция).
         """
         logger.info("Массовое добавление фильмов. Количество: %d", len(films))
 
-        # Разбиваем фильмы на части, чтобы избежать переполнения памяти или превышения лимита запросов
+        # Разбиваем фильмы на части, чтобы избежать переполнения памяти или
+        # превышения лимита запросов
         for chunk in chunked(films, BULK_CHUNK_SIZE):
             elastic_actions = [
                 {
@@ -64,16 +70,30 @@ class AddFilmService:
             ]
 
             try:
-                success, errors = await helpers.async_bulk(self.elastic, elastic_actions)
+                success, errors = await helpers.async_bulk(
+                    self.elastic.es_client, elastic_actions
+                )
                 logger.info("Добавлено %d фильмов из текущей партии.", success)
                 if errors:
-                    logger.warning("Некоторые фильмы не были добавлены: %s", errors)
+                    logger.warning(
+                        "Некоторые фильмы не были добавлены: %s", errors
+                    )
             except ConnectionError as e:
-                logger.error("Ошибка подключения к Elasticsearch при массовом добавлении: %s", e)
+                logger.error(
+                    "Ошибка подключения к Elasticsearch при массовом "
+                    "добавлении: %s",
+                    e,
+                )
                 raise
             except RequestError as e:
-                logger.error("Ошибка запроса к Elasticsearch при массовом добавлении: %s", e.info)
+                logger.error(
+                    "Ошибка запроса к Elasticsearch при массовом добавлении: "
+                    "%s",
+                    e.info,
+                )
                 raise
             except Exception as e:
                 logger.error("Ошибка при массовом добавлении фильмов: %s", e)
-                raise RuntimeError("Не удалось выполнить массовое добавление фильмов.") from e
+                raise RuntimeError(
+                    "Не удалось выполнить массовое добавление фильмов."
+                ) from e

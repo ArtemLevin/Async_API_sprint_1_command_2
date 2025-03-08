@@ -4,17 +4,13 @@ from decimal import Decimal
 from typing import Dict, List
 
 from faker import Faker
-
 from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
 from src.db.elastic import get_elastic
-from src.db.redis_client import get_redis
 from src.services.add_films import AddFilmService
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 fake = Faker()
 
@@ -29,18 +25,28 @@ async def generate_fake_film() -> Dict[str, str]:
         "id": fake.uuid4(),
         "title": fake.sentence(nb_words=3),
         "description": fake.text(max_nb_chars=200),
-        "genres": [fake.word() for _ in range(1, 2)],
+        "genres": [
+            {"id": fake.uuid4(), "name": fake.word()} for _ in range(1, 3)
+        ],
         "actors": [
-            f"{fake.first_name()} {fake.last_name()}" for _ in range(1, 3)
+            {
+                "id": fake.uuid4(),
+                "full_name": f"{fake.first_name()} {fake.last_name()}",
+            } for _ in range(1, 3)
         ],
         "writers": [
-            f"{fake.first_name()} {fake.last_name()}" for _ in range(1, 2)
+            {
+                "id": fake.uuid4(),
+                "full_name": f"{fake.first_name()} {fake.last_name()}",
+            } for _ in range(1, 3)
         ],
         "directors": [
-            f"{fake.first_name()} {fake.last_name()}" for _ in range(1)
+            {
+                "id": fake.uuid4(),
+                "full_name": f"{fake.first_name()} {fake.last_name()}",
+            } for _ in range(1, 3)
         ],
         "imdb_rating": Decimal(f"{fake.random.uniform(1, 10):.1f}"),
-        "release_year": fake.year(),
     }
 
 
@@ -75,7 +81,6 @@ async def populate_films(
             "Генерация фильмов для батча %d - %d...", batch_start, batch_end
         )
 
-
         films = await generate_fake_films_async(batch_size)
 
         try:
@@ -94,7 +99,8 @@ async def populate_films(
         logger.info("Батч %d - %d завершён.", batch_start, batch_end)
 
     logger.info(
-        "Все %d фильмов успешно загружены в Elasticsearch и Redis!", num_films
+        "Все %d фильмов успешно загружены в Elasticsearch и Redis!",
+        num_films,
     )
 
 
@@ -131,7 +137,7 @@ async def main() -> None:
     film_service = AddFilmService(elastic=elastic_client)
 
     num_films = 10
-    batch_size = 10
+    batch_size = 100
 
     try:
         await populate_films(
@@ -149,4 +155,6 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as e:
-        logger.critical("Непредвиденная ошибка в программе при добавлении фильмов: %s", e)
+        logger.critical(
+            "Непредвиденная ошибка в программе при добавлении фильмов: %s", e
+        )

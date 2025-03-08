@@ -1,12 +1,12 @@
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GenreBase(BaseModel):
     """
-    Базовая модель для представления жанра.
+    Базовая модель для представления кратной информации по жанру.
     """
     id: UUID = Field(
         ...,
@@ -27,7 +27,7 @@ class Genre(GenreBase):
 
 class PersonBase(BaseModel):
     """
-    Базовая модель для представления информации о персоне.
+    Базовая модель для представления кратной информации по персоне.
     """
     id: UUID = Field(
         ...,
@@ -62,27 +62,38 @@ class Person(PersonBase):
     )
 
 
-class Film(BaseModel):
+class FilmBase(BaseModel):
     """
-    Модель для представления информации о фильме.
+    Базовая модель для представления кратной информации по фильму.
     """
     id: UUID = Field(
         ...,
         description="Уникальный идентификатор фильма",
-        serialization_alias="uuid"
+        serialization_alias="uuid",
     )
     title: str = Field(
         ..., min_length=1, max_length=255, description="Название фильма"
     )
+    imdb_rating: Decimal = Field(
+        ..., ge=1, le=10, description="Рейтинг фильма по версии IMDb"
+    )
+
+    # Автоматическое преобразование Decimal → float
+    model_config = ConfigDict(json_encoders={Decimal: float})
+
+
+class Film(FilmBase):
+    """
+    Модель для представления информации о фильме.
+    """
     description: str = Field(..., description="Описание фильма")
-    genre: list[GenreBase] = Field(..., description="Список жанров фильма")
+    genres: list[GenreBase] = Field(
+        ..., description="Список жанров фильма", serialization_alias="genre"
+    )
     actors: list[PersonBase] = Field(..., description="Список актёров фильма")
     writers: list[PersonBase] = Field(
         ..., description="Список сценаристов фильма"
     )
     directors: list[PersonBase] = Field(
         ..., description="Список режиссёров фильма"
-    )
-    imdb_rating: Decimal = Field(
-        ..., ge=1, le=10, description="Рейтинг фильма по версии IMDb"
     )

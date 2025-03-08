@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from src.core.exceptions import CheckCacheError, CheckElasticError
 from src.db.elastic import get_elastic
 from src.db.redis_client import get_redis
-from src.models.models import FilmBase, Person
+from src.models.models import Film, FilmBase
 from src.services.base_service import BaseService
 from src.utils.cache_service import CacheService
 from src.utils.elastic_service import ElasticService
@@ -17,48 +17,53 @@ from src.utils.elastic_service import ElasticService
 logger = logging.getLogger(__name__)
 
 
-class PersonService(BaseService):
+class FilmService(BaseService):
     """
-    Сервис для работы с персонами.
+    Сервис для работы с фильмами.
 
     Осуществляет взаимодействие с Redis (для кеширования)
     и Elasticsearch (для полнотекстового поиска).
     """
 
-    async def get_person_by_id(self, person_id: str) -> BaseModel | None:
+    async def get_film_by_id(self, film_id: str) -> BaseModel | None:
         """Получить фильм по его ID."""
-        log_info = f"Получение персоны по ID {person_id}"
+        log_info = f"Получение фильма по ID {film_id}"
 
         logger.info(log_info)
 
         #  Индекс для Elasticsearch
-        es_index = "persons"
+        es_index = "films"
         # Ключ для кеша
-        cache_key = f"person:{person_id}"
+        cache_key = f"film:{film_id}"
         # Модель Pydantic для возврата
-        model = Person
+        model = Film
 
         return await self._get_by_id(
-            model, es_index, person_id, cache_key, log_info
+            model, es_index, film_id, cache_key, log_info
         )
 
-    async def get_person_films(
+    async def get_films(
             self,
-            person: UUID,
+            genre: UUID | None = None,
+            sort: str = "-imdb_rating",
+            page_size: int = 10,
+            page_number: int = 1,
     ) -> list[BaseModel] | None:
         """
-        Получить список фильмов в производстве которых участвовала персона.
+        Получить список фильмов с поддержкой сортировки по рейтингу,
+        фильтрации по жанру и пагинацией.
         """
         log_info = (
-            f"Запрос на получение фильмов с участием персоны: id = {person}."
+            f"Запрос на получение фильмов: (sort={sort}, genre={genre}, "
+            f"page_size={page_size}, page_number={page_number})."
         )
 
         logger.info(log_info)
 
         #  Индекс для Elasticsearch
-        es_index = "persons"
+        es_index = "films"
         # Ключ для кеша
-        cache_key = f"person_films:{person}"
+        cache_key = f"films:{genre}:{sort}:{page_size}:{page_number}"
         # Модель Pydantic для возврата
         model = FilmBase
 
@@ -75,41 +80,37 @@ class PersonService(BaseService):
         # Если нет в кеше, ищем в Elasticsearch
 
         # Формируем тело запроса для Elasticsearch
-        body = {"query": {"bool": {
-            "should": [
-                {
-                    "nested": {
-                        "path": "actors",
-                        "query": {
-                            "term": {
-                                "actors.id": person,
-                            }
-                        }
-                    }
-                },
-                {
-                    "nested": {
-                        "path": "writers",
-                        "query": {
-                            "term": {
-                                "writers.id": person,
-                            }
-                        }
-                    }
-                },
-                {
-                    "nested": {
-                        "path": "directors",
-                        "query": {
-                            "term": {
-                                "directors.id": person,
-                            }
-                        }
-                    }
-                },
-            ],
-            "minimum_should_match": 1,
-        }}}
+        body = {"query": {}}
+
+        # Фильтр по жанру, если есть
+        if genre:
+            filter_by_genre = [
+                {"nested": {
+                    "path": "genres",
+                    "query": {"term": {"genres.id": genre}},
+                }}
+            ]
+            body["query"]["bool"] = {
+                "must": [],
+                "filter": filter_by_genre,
+            }
+
+        else:
+            body["query"]["match_all"] = {}
+
+        # Сортировка
+        sort_field = sort.lstrip("-")
+        sort_order = "desc" if sort.startswith("-") else "asc"
+
+        body["sort"] = [{sort_field: {
+            "order": sort_order, "missing": "_last"
+        }}]
+
+        #  Вычисляем начальную запись для выдачи
+        from_value = (page_number - 1) * page_size
+
+        body["from"] = from_value
+        body["size"] = page_size
 
         # Проверяем наличие результата в Elasticsearch
         try:
@@ -126,26 +127,26 @@ class PersonService(BaseService):
 
             return films_obj
 
-    async def search_persons(
+    async def search_films(
         self,
         query: str | None = None,
         page_size: int = 10,
         page_number: int = 1,
     ) -> list[BaseModel] | None:
         """
-        Поиск персон по ключевым словам и пагинацией.
+        Поиск фильмов по ключевым словам и пагинацией.
         """
         log_info = (
-            f"Запрос на получение персон: (query={query}, "
+            f"Запрос на получение фильмов: (query={query}, "
             f"page_size={page_size}, page_number={page_number})."
         )
 
         logger.info(log_info)
 
         #  Индекс для Elasticsearch
-        es_index = "persons"
+        es_index = "films"
         # Модель Pydantic для возврата
-        model = Person
+        model = FilmBase
 
         # Формируем тело запроса для Elasticsearch
         body = {"query": {}}
@@ -154,7 +155,7 @@ class PersonService(BaseService):
         if query:
             body["query"]["multi_match"] = {
                 "query": query,
-                "fields": ["full_name"],
+                "fields": ["title"],
                 "fuzziness": "AUTO"
             }
 
@@ -178,24 +179,23 @@ class PersonService(BaseService):
 
 
 @lru_cache()
-def get_person_service(
+def get_film_service(
     redis: Annotated[CacheService, Depends(get_redis)],
     elastic: Annotated[ElasticService, Depends(get_elastic)]
-) -> PersonService:
+) -> FilmService:
     """
-    Провайдер для получения экземпляра PersonService.
+    Провайдер для получения экземпляра FilmService.
 
-    Функция создаёт синглтон экземпляр PersonService, используя Redis и
+    Функция создаёт синглтон экземпляр FilmService, используя Redis и
     Elasticsearch, которые передаются через Depends (зависимости FastAPI).
 
     :param redis: Экземпляр клиента Redis, предоставленный через Depends.
     :param elastic: Экземпляр клиента Elasticsearch, предоставленный через
     Depends.
-    :return: Экземпляр PersonService, который используется для работы с
-    фильмами.
+    :return: Экземпляр FilmService, который используется для работы с фильмами.
     """
     logger.info(
-        "Создаётся экземпляр PersonService с использованием Redis и "
+        "Создаётся экземпляр FilmService с использованием Redis и "
         "Elasticsearch."
     )
-    return PersonService(redis, elastic)
+    return FilmService(redis, elastic)

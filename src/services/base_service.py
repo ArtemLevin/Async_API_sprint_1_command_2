@@ -1,109 +1,330 @@
 import logging
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Type
 
+import orjson
 from pydantic import BaseModel, ValidationError
-from src.core.exceptions import CacheServiceError, ElasticServiceError
+
+from src.core.exceptions import (CacheServiceError, CheckCacheError,
+                                 CheckElasticError, CreateObjectError,
+                                 CreateObjectsError, ElasticNotFoundError,
+                                 ElasticParsingError, ElasticServiceError,
+                                 JsonLoadsError, ModelDumpError,
+                                 ModelDumpJsonError)
+from src.utils.cache_service import CacheService
+from src.utils.elastic_service import ElasticService
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
-class BaseService(ABC):
-    def __init__(
-            self, elastic_service: Any, cache_service: Any, index_name: str
+class BaseService:
+    """
+    Базовый сервис.
+
+    Осуществляет взаимодействие с Redis (для кеширования)
+    и Elasticsearch (для полнотекстового поиска).
+    """
+
+    def __init__(self, redis_client: CacheService, es_client: ElasticService):
+        self.redis_client = redis_client
+        self.es_client = es_client
+
+    @staticmethod
+    def _model_dump(
+        obj: BaseModel,
+        exclude: set[str] | dict | None = None,
+        log_info: str = "",
+    ) -> dict:
+        """
+        Вспомогательный метод для генерации словаря из объекта модели Pydantic.
+        """
+        try:
+            return obj.model_dump(
+                mode='json', exclude=exclude
+            )
+
+        except (AttributeError, TypeError, ValueError, KeyError) as e:
+            logger.error(
+                "Ошибка при сериализации объекта модели %s с ID %s в словарь: "
+                "%s. %s",
+                obj.id, obj.__class__.__name__, e, log_info
+            )
+            raise ModelDumpError(e)
+
+    @staticmethod
+    def _create_object_from_dict(
+        model: Type[BaseModel], data: dict, log_info: str = ""
+    ) -> BaseModel:
+        """
+        Вспомогательный метод для создания объекта модели Pydantic из словаря.
+        """
+        try:
+            return model(**data)
+
+        except ValidationError as e:
+            logger.warning(
+                "Ошибка при валидации из словаря в модель %s: %s. "
+                "Данные для валидации: %s. %s",
+                model.__name__, e, data, log_info
+            )
+            raise CreateObjectError(e.json())
+
+    @staticmethod
+    def _get_record_from_source(data: dict, log_info: str = "") -> dict:
+        """
+        Вспомогательный метод для извлечения данных по записи из Elasticsearch.
+        """
+        try:
+            record = data["_source"]
+            if isinstance(record, dict):
+                return record
+            raise TypeError(
+                "Ожидался dict, но получен %s. %s",
+                type(record).__name__, log_info
+            )
+
+        except (KeyError, TypeError) as e:
+            logger.error(
+                "Ошибка в структуре данных из Elasticsearch: %s"
+                "Переданные данные для получения значения по ключа "
+                "'_source': %s. %s",
+                e, data, log_info
+            )
+            raise ElasticParsingError(e)
+
+    @staticmethod
+    def _get_records_from_hits(data: dict, log_info: str = "") -> list[dict]:
+        """
+        Вспомогательный метод для извлечения списка записей из Elasticsearch.
+        """
+        try:
+            return data["hits"]["hits"]
+
+        except (KeyError, TypeError) as e:
+            logger.error(
+                "Ошибка некорректного ответа от Elasticsearch: %s. %s",
+                e, log_info
+            )
+            raise ElasticParsingError(e)
+
+    @staticmethod
+    def _get_data_from_json(json: bytes | None, log_info: str = "") -> Any:
+        """Вспомогательный метод для десериализации JSON в объекты Python."""
+        try:
+            return orjson.loads(json)
+
+        except orjson.JSONDecodeError as e:
+            logger.warning(
+                "Ошибка при попытки декодировать json в объект Python. "
+                "json: %s. %s",
+                json, log_info
+            )
+            raise JsonLoadsError(e)
+
+    @staticmethod
+    def _create_json_from_data(data: dict | list, log_info: str = "") -> bytes:
+        try:
+            return orjson.dumps(data)
+
+        except orjson.JSONEncodeError as e:
+            logger.error(
+                "Ошибка сериализации словаря в json: %s. "
+                "Входные данные: %s. %s",
+                e, data, log_info
+            )
+            raise ModelDumpJsonError(e)
+
+    def _create_objects(
+        self,
+        model: Type[BaseModel],
+        data: list[dict],
+        log_info: str = "",
+    ) -> list[BaseModel]:
+        """
+        Вспомогательный метод для создания списка с объектами модели Pydantic.
+        """
+        valid_objects = []
+
+        for cell in data:
+            try:
+                record = self._get_record_from_source(cell)
+
+            except ElasticParsingError:
+                pass
+
+            else:
+                try:
+                    model_obj = self._create_object_from_dict(model, record)
+
+                except CreateObjectError:
+                    pass
+
+                else:
+                    valid_objects.append(model_obj)
+
+        if not valid_objects:
+            if data:
+                raise CreateObjectsError(
+                    "Не удалось создать ни одного объекта модели %s "
+                    "из переданных данных: %s. %s",
+                    model.__name__, data, log_info
+                )
+
+        return valid_objects
+
+    def _create_json_from_objects(
+        self, data: list[BaseModel], log_info: str = ""
+    ) -> bytes:
+        """
+        Вспомогательный метод для создания json из списка объектов Pydantic.
+        """
+        valid_data = []
+
+        for model_obj in data:
+            try:
+                model_data = self._model_dump(model_obj)
+
+            except ModelDumpError as e:
+                raise ModelDumpJsonError(e)
+
+            else:
+                valid_data.append({"_source": model_data})
+
+        return self._create_json_from_data(valid_data, log_info)
+
+    async def _get_from_cache(
+            self, model: Type[BaseModel], cache_key: str, log_info: str = ""
     ):
-        self.elastic_service = elastic_service
-        self.cache_service = cache_service
-        self.index_name = index_name
+        try:
+            cache_json = await self.redis_client.get(cache_key, log_info)
+            cache_data = self._get_data_from_json(cache_json, log_info)
+            result = self._create_objects(model, cache_data, log_info)
 
-    @abstractmethod
-    def get_cache_key(self, unique_id: Any) -> str:
-        pass
+        except (CacheServiceError, JsonLoadsError, CreateObjectsError) as e:
+            raise CheckCacheError(e)
 
-    @abstractmethod
-    def parse_elastic_response(
-            self, response: Dict[str, Any]
+        else:
+            logger.info("Данные из кеша прошли валидацию. %s", log_info)
+
+            return result
+
+    async def _get_record_from_elastic(
+        self,
+        model: Type[BaseModel],
+        index: str,
+        id: str,
+        log_info: str = "",
     ) -> BaseModel | None:
-        pass
-
-    async def get_by_uuid(self, unique_id: Any) -> BaseModel | None:
-        """
-        Получение объекта по UUID из кэша или Elasticsearch.
-        """
-        cache_key = self.get_cache_key(unique_id)
-        logger.info(f"Начат процесс получения объекта с UUID '{unique_id}'.")
-
-        # Попытка получить данные из кэша
+        """Вспомогательный метод для поиска записи в Elasticsearch."""
         try:
-            cached_data = await self.cache_service.get(cache_key)
-            if cached_data:
-                logger.info(f"Данные для UUID '{unique_id}' найдены в кэше.")
-                try:
-                    return self.parse_elastic_response({"_source": cached_data})
-                except ValidationError as e:
-                    logger.error(
-                        f"Ошибка валидации кэшированных данных для UUID "
-                        f"'{unique_id}': {e}"
-                    )
-                    return None
-        except Exception as e:
-            logger.error(
-                f"Ошибка при получении данных из кэша для UUID '{unique_id}': {e}"
+            response = await self.es_client.get(
+                index, id, log_info
             )
-            raise CacheServiceError(
-                f"Ошибка при обращении к кэшу для UUID '{unique_id}'."
+            record_data = self._get_record_from_source(response, log_info)
+            record_obj = self._create_object_from_dict(
+                model, record_data, log_info
             )
 
-        # Если данных в кэше нет, запрос в Elasticsearch
-        logger.info(f"Данные для UUID '{unique_id}' не найдены в кэше. Выполняется запрос в Elasticsearch.")
-        query = {"query": {"term": {"uuid": str(unique_id)}}}
+        except (
+            ElasticServiceError, CreateObjectError, ElasticParsingError
+        ) as e:
+            raise CheckElasticError(e)
+
+        except ElasticNotFoundError:
+            logger.info(
+                "Запись с ID %s не найдена в Elasticsearch. %s", id, log_info
+            )
+            return None
+
+        else:
+            logger.info(
+                "Запись с ID %s найдена в Elasticsearch. %s", id, log_info
+            )
+            return record_obj
+
+    async def _get_records_from_elastic(
+        self,
+        model: Type[BaseModel],
+        index: str,
+        body: dict,
+        log_info: str = "",
+    ) -> list[BaseModel]:
+        """Вспомогательный метод для поиска записей в Elasticsearch."""
         try:
-            response = await self.elastic_service.search(index=self.index_name, body=query)
-            hits = response.get("hits", {}).get("hits", [])
-            if not hits:
-                logger.warning(f"Объект с UUID '{unique_id}' не найден в Elasticsearch.")
-                return None
+            response = await self.es_client.search(
+                index, body, log_info)
+            records_data = self._get_records_from_hits(response, log_info)
+            records_obj = self._create_objects(model, records_data, log_info)
 
-            parsed_data = self.parse_elastic_response(hits[0])
-            if parsed_data:
-                # Сохранение данных в кэш
-                try:
-                    await self.cache_service.set(cache_key, parsed_data.json())
-                    logger.info(f"Данные для UUID '{unique_id}' сохранены в кэш.")
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при сохранении данных в кэш для UUID '{unique_id}': {e}"
-                    )
-                    raise CacheServiceError(
-                        f"Ошибка при сохранении данных в кэш для UUID '{unique_id}'."
-                    )
-            return parsed_data
-        except Exception as e:
-            logger.error(
-                f"Ошибка при запросе объекта с UUID '{unique_id}' в Elasticsearch: {e}"
+        except (
+            ElasticServiceError, ElasticParsingError, CreateObjectsError
+        ) as e:
+            logger.warning(
+                "Не удалось получить ни одного объекта модели %s из "
+                "полученных данных от Elasticsearch. %s",
+                model.__name__, log_info,
             )
-            raise ElasticServiceError(
-                f"Ошибка при запросе объекта с UUID '{unique_id}' в Elasticsearch."
-            )
+            raise CheckElasticError(e)
 
-    async def get_all(
-            self, query: Dict[str, Any] = None, size: int = 1000
-    ) -> List[BaseModel]:
-        """
-        Получение всех объектов из Elasticsearch по произвольному запросу.
-        """
-        query = query or {"query": {"match_all": {}}}
-        logger.info("Начат процесс получения всех объектов.")
+        else:
+            logger.info(
+                "Из Elasticsearch получено записей в количестве: %d шт. %s",
+                len(records_obj), log_info
+            )
+            return records_obj
+
+    async def _put_to_cache(
+        self, cache_key: str, data: list[BaseModel] | str, log_info: str = ""
+    ) -> None:
+        """Вспомогательные метод для кеширования записей."""
         try:
-            response = await self.elastic_service.search(index=self.index_name, body=query)
-            hits = response.get("hits", {}).get("hits", [])
-            logger.info(f"Найдено {len(hits)} объектов в Elasticsearch.")
-            return [
-                self.parse_elastic_response(hit)
-                for hit in hits
-                if hit
-            ]
-        except Exception as e:
-            logger.error(f"Ошибка при запросе всех объектов: {e}")
-            raise ElasticServiceError("Ошибка при запросе всех объектов.")
+            json_represent = self._create_json_from_objects(
+                data, log_info
+            )
+            await self.redis_client.set(cache_key, json_represent, log_info)
+
+        except (CacheServiceError, ModelDumpJsonError):
+            pass
+
+    async def _get_by_id(
+            self,
+            model: Type[BaseModel],
+            index: str,
+            id: str,
+            cache_key: str,
+            log_info: str,
+    ) -> BaseModel | None:
+        """
+        Вспомогательный метод для получения записи по ID. Поддерживает кеш.
+        """
+        # Проверяем наличие результата в кеше (Redis)
+        try:
+            cache = await self._get_from_cache(
+                model, cache_key, log_info
+            )
+            return cache[0]
+
+        except IndexError:
+            return None
+
+        except CheckCacheError:
+            pass
+
+        # Проверяем наличие результата в Elasticsearch
+        try:
+            obj = await self._get_record_from_elastic(
+                model, index, id, log_info
+            )
+        except CheckElasticError:
+            return None
+
+        else:
+            # Кешируем асинхронно фильм в Redis
+            if obj:
+                cache_data = [obj]
+
+            else:
+                cache_data = []
+
+            await self._put_to_cache(cache_key, cache_data, log_info)
+
+            return obj
