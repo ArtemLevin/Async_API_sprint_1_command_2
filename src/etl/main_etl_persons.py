@@ -31,7 +31,7 @@ async def main():
 
         # Запуск ETL-процесса
         logger.info("Запуск ETL-процесса...")
-        films_index = settings.ELASTIC_INDEX  # Индекс фильмов из настроек
+        films_index = "films"  # Индекс фильмов
         person_index = "persons"  # Индекс персон
 
         await etl_service.run_etl(films_index=films_index, person_index=person_index)

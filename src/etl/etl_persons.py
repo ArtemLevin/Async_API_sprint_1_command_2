@@ -43,20 +43,20 @@ class ETLPersonService:
                 directors = doc["_source"].get("directors", [])
 
                 for actor in actors:
-                    if isinstance(actor, dict) and "uuid" in actor and "full_name" in actor:
-                        persons.add((actor["uuid"], actor["full_name"], "actor"))
+                    if isinstance(actor, dict) and "id" in actor and "full_name" in actor:
+                        persons.add((actor["id"], actor["full_name"], "actor"))
                     else:
                         logger.warning(f"Неверный формат актера: {actor}")
 
                 for writer in writers:
-                    if isinstance(writer, dict) and "uuid" in writer and "full_name" in writer:
-                        persons.add((writer["uuid"], writer["full_name"], "writer"))
+                    if isinstance(writer, dict) and "id" in writer and "full_name" in writer:
+                        persons.add((writer["id"], writer["full_name"], "writer"))
                     else:
                         logger.warning(f"Неверный формат сценариста: {writer}")
 
                 for director in directors:
-                    if isinstance(director, dict) and "uuid" in director and "full_name" in director:
-                        persons.add((director["uuid"], director["full_name"], "director"))
+                    if isinstance(director, dict) and "id" in director and "full_name" in director:
+                        persons.add((director["id"], director["full_name"], "director"))
                     else:
                         logger.warning(f"Неверный формат режиссера: {director}")
 
