@@ -2,8 +2,8 @@
 
 set -e
 
-# Если переменная RUN_PRE_SCRIPTS установлена в true, выполняем предварительные скрипты
-if [ "$RUN_PRE_SCRIPTS" = "false" ]; then
+# Проверяем, выполнена ли инициализация
+if [ ! -f /app/.init_done ]; then
     echo "Запуск предварительных скриптов..."
 
     python3 /app/src/db/fill_movies.py || { echo "Ошибка при выполнении fill_movies.py"; exit 1; }
