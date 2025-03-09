@@ -1,155 +1,201 @@
 import logging
-from typing import List
+from functools import lru_cache
+from typing import Annotated
 from uuid import UUID
 
-from src.models.models import FilmRole, Person
+from fastapi import Depends
+from pydantic import BaseModel
+
+from src.core.exceptions import CheckCacheError, CheckElasticError
+from src.db.elastic import get_elastic
+from src.db.redis_client import get_redis
+from src.models.models import FilmBase, Person
 from src.services.base_service import BaseService
+from src.utils.cache_service import CacheService
+from src.utils.elastic_service import ElasticService
 
 logger = logging.getLogger(__name__)
 
 
 class PersonService(BaseService):
     """
-    Сервис для работы с данными о персонах.
+    Сервис для работы с персонами.
+
+    Осуществляет взаимодействие с Redis (для кеширования)
+    и Elasticsearch (для полнотекстового поиска).
     """
 
-    def get_cache_key(self, unique_id: UUID) -> str:
-        """
-        Генерация ключа для кеша.
+    async def get_person_by_id(self, person_id: str) -> BaseModel | None:
+        """Получить фильм по его ID."""
+        log_info = f"Получение персоны по ID {person_id}"
 
-        :param unique_id: Уникальный ID персоны (UUID).
-        :return: Строка-ключ для кеша.
-        """
-        return f"person:{unique_id}"
+        logger.info(log_info)
 
-    def parse_elastic_response(self, response: dict) -> Person | None:
-        """
-        Преобразует ответ Elasticsearch в объект Person.
+        #  Индекс для Elasticsearch
+        es_index = "persons"
+        # Ключ для кеша
+        cache_key = f"person:{person_id}"
+        # Модель Pydantic для возврата
+        model = Person
 
-        :param response: Ответ Elasticsearch (словарь).
-        :return: Объект Person или None в случае ошибки.
+        return await self._get_by_id(
+            model, es_index, person_id, cache_key, log_info
+        )
+
+    async def get_person_films(
+            self,
+            person: UUID,
+    ) -> list[BaseModel] | None:
         """
+        Получить список фильмов в производстве которых участвовала персона.
+        """
+        log_info = (
+            f"Запрос на получение фильмов с участием персоны: id = {person}."
+        )
+
+        logger.info(log_info)
+
+        #  Индекс для Elasticsearch
+        es_index = "persons"
+        # Ключ для кеша
+        cache_key = f"person_films:{person}"
+        # Модель Pydantic для возврата
+        model = FilmBase
+
+        # Проверяем наличие результата в кеше (Redis)
         try:
-            # Извлекаем данные из "_source"
-            source = response["_source"]
-            # Парсим список фильмов
-            films = [
-                FilmRole(
-                    id=film["uuid"],
-                    roles=film.get("roles", [])
-                )
-                for film in source.get("films", [])
-            ]
+            cache_films = await self._get_from_cache(
+                model, cache_key, log_info
+            )
+            return cache_films
 
-            # Создаем объект Person
-            return Person(
-                id=UUID(source["uuid"]),  # Преобразуем строку в UUID
-                full_name=source["full_name"],
-                films=films
+        except CheckCacheError:
+            pass
+
+        # Если нет в кеше, ищем в Elasticsearch
+
+        # Формируем тело запроса для Elasticsearch
+        body = {"query": {"bool": {
+            "should": [
+                {
+                    "nested": {
+                        "path": "actors",
+                        "query": {
+                            "term": {
+                                "actors.id": person,
+                            }
+                        }
+                    }
+                },
+                {
+                    "nested": {
+                        "path": "writers",
+                        "query": {
+                            "term": {
+                                "writers.id": person,
+                            }
+                        }
+                    }
+                },
+                {
+                    "nested": {
+                        "path": "directors",
+                        "query": {
+                            "term": {
+                                "directors.id": person,
+                            }
+                        }
+                    }
+                },
+            ],
+            "minimum_should_match": 1,
+        }}}
+
+        # Проверяем наличие результата в Elasticsearch
+        try:
+            films_obj = await self._get_records_from_elastic(
+                model, es_index, body, log_info
             )
 
-        except KeyError as e:
-            logger.error(f"Ошибка парсинга данных Elasticsearch: отсутствует ключ {e}")
-            return None
-        except ValueError as e:
-            logger.error(f"Ошибка преобразования данных: {e}")
+        except CheckElasticError:
             return None
 
-    async def get_all_persons(self) -> List[Person]:
+        else:
+            # Кешируем асинхронно результат в Redis
+            await self._put_to_cache(cache_key, films_obj, log_info)
+
+            return films_obj
+
+    async def search_persons(
+        self,
+        query: str | None = None,
+        page_size: int = 10,
+        page_number: int = 1,
+    ) -> list[BaseModel] | None:
         """
-        Получение списка всех персон.
-
-        :return: Список объектов Person.
+        Поиск персон по ключевым словам и пагинацией.
         """
-        try:
-            # Получаем сырые данные из Elasticsearch
-            raw_persons = await self.elastic_service.search(index="persons", body={"query": {"match_all": {}}})
+        log_info = (
+            f"Запрос на получение персон: (query={query}, "
+            f"page_size={page_size}, page_number={page_number})."
+        )
 
-            # Фильтруем только успешные результаты
-            persons = [
-                self.parse_elastic_response(hit)
-                for hit in raw_persons.get("hits", {}).get("hits", [])
-                if self.parse_elastic_response(hit) is not None
-            ]
+        logger.info(log_info)
 
-            logger.info(f"Получено {len(persons)} персон.")
-            return persons
+        #  Индекс для Elasticsearch
+        es_index = "persons"
+        # Модель Pydantic для возврата
+        model = Person
 
-        except Exception as e:
-            logger.error(f"Ошибка при получении данных о персонах: {e}")
-            raise
+        # Формируем тело запроса для Elasticsearch
+        body = {"query": {}}
 
-    async def get_person_by_id(self, person_id: UUID) -> Person | None:
-        """
-        Получение данных о персоне по её уникальному ID.
-
-        :param person_id: Уникальный ID персоны (UUID).
-        :return: Объект Person или None, если персона не найдена.
-        """
-        try:
-            # Формируем запрос для поиска по ID
-            query = {
-                "query": {
-                    "term": {
-                        "id": str(person_id)  # Преобразуем UUID в строку для запроса
-                    }
-                }
+        #  Поиск, если есть
+        if query:
+            body["query"]["multi_match"] = {
+                "query": query,
+                "fields": ["full_name"],
+                "fuzziness": "AUTO"
             }
 
-            # Выполняем запрос к Elasticsearch
-            response = await self.elastic_service.search(index="persons", body=query)
+        else:
+            body["query"]["match_all"] = {}
 
-            # Проверяем, есть ли результаты
-            hits = response.get("hits", {}).get("hits", [])
-            if not hits:
-                logger.warning(f"Персона с ID {person_id} не найдена.")
-                return None
+        #  Вычисляем начальную запись для выдачи
+        from_value = (page_number - 1) * page_size
 
-            # Парсим первый результат
-            person_data = hits[0]
-            return self.parse_elastic_response(person_data)
+        body["from"] = from_value
+        body["size"] = page_size
 
-        except Exception as e:
-            logger.error(f"Ошибка при поиске персоны с ID {person_id}: {e}")
-            raise
-
-
-    async def search_persons_by_full_name(self, query: str, page_size: int = 10, page_number: int = 1) -> List[Person]:
-        """
-        Поиск фильмов по названию.
-
-        :param query: Строка для поиска (название фильма).
-        :param page_size: Количество результатов на странице.
-        :param page_number: Номер страницы.
-        :return: Список объектов Film.
-        """
+        # Проверяем наличие результата в Elasticsearch
         try:
-            # Формируем запрос для поиска по названию фильма
-            search_query = {
-                "from": (page_number - 1) * page_size,  # Пагинация: начало выборки
-                "size": page_size,                     # Пагинация: размер страницы
-                "query": {
-                    "match": {
-                        "full_name": query                 # Ищем по полю "full_name"
-                    }
-                }
-            }
+            return await self._get_records_from_elastic(
+                model, es_index, body, log_info
+            )
 
-            logger.info(f"Выполняем поиск фильмов по запросу: {query}")
+        except CheckElasticError:
+            return None
 
-            # Выполняем запрос к Elasticsearch
-            response = await self.elastic_service.search(index="persons", body=search_query)
 
-            # Фильтруем только успешные результаты
-            persons = [
-                self.parse_elastic_response(hit)
-                for hit in response.get("hits", {}).get("hits", [])
-                if self.parse_elastic_response(hit) is not None
-            ]
+@lru_cache()
+def get_person_service(
+    redis: Annotated[CacheService, Depends(get_redis)],
+    elastic: Annotated[ElasticService, Depends(get_elastic)]
+) -> PersonService:
+    """
+    Провайдер для получения экземпляра PersonService.
 
-            logger.info(f"Найдено {len(persons)} фильмов по запросу '{query}'.")
-            return persons
+    Функция создаёт синглтон экземпляр PersonService, используя Redis и
+    Elasticsearch, которые передаются через Depends (зависимости FastAPI).
 
-        except Exception as e:
-            logger.error(f"Ошибка при поиске фильмов по запросу '{query}': {e}")
-            raise
+    :param redis: Экземпляр клиента Redis, предоставленный через Depends.
+    :param elastic: Экземпляр клиента Elasticsearch, предоставленный через
+    Depends.
+    :return: Экземпляр PersonService, который используется для работы с
+    фильмами.
+    """
+    logger.info(
+        "Создаётся экземпляр PersonService с использованием Redis и "
+        "Elasticsearch."
+    )
+    return PersonService(redis, elastic)
