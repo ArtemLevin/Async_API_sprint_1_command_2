@@ -43,8 +43,8 @@ class ETLService:
             async for doc in helpers.async_scan(self.elastic, index=films_index):
                 film_genres = doc["_source"].get("genre", [])
                 for genre in film_genres:
-                    if isinstance(genre, dict) and "uuid" in genre and "name" in genre:
-                        genres.add((genre["uuid"], genre["name"]))
+                    if isinstance(genre, dict) and "id" in genre and "name" in genre:
+                        genres.add((genre["id"], genre["name"]))
                     else:
                         logger.warning(f"Неверный формат жанра: {genre}")
         except ConnectionError:

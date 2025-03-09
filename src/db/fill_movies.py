@@ -8,13 +8,16 @@ from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk
 from faker import Faker
 
+from src.core.config import settings
 from src.models.models import Film, GenreBase, PersonBase
 from src.utils.elastic_service import ElasticService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-es_client = AsyncElasticsearch(["http://elasticsearch:9200"])
+es_client = AsyncElasticsearch(
+    hosts=[f'http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}']
+)
 
 elastic_service = ElasticService(es_client)
 
@@ -32,7 +35,7 @@ async def create_fake_films(num_films: int, index_name: str):
         logger.debug(f"Создан фейковый фильм: {film.title}")
 
         # Преобразование объекта Film в словарь
-        film_dict = film.model_dump(by_alias=True)
+        film_dict = film.model_dump()
         logger.debug(f"Фильм преобразован в словарь: {film_dict}")
 
         # Добавление фильма в индекс Elasticsearch
@@ -90,7 +93,7 @@ async def bulk_create_films(films: list[Film], index_name: str):
         {
             "_index": index_name,
             "_id": film.id,
-            "_source": film.model_dump(by_alias=True),
+            "_source": film.model_dump(),
         }
         for film in films
     ]
@@ -191,6 +194,7 @@ async def main():
 
     except Exception as e:
         logger.error(f"Критическая ошибка во время выполнения скрипта: {e}")
+
     finally:
         # Закрываем соединение с Elasticsearch
         logger.info("Закрытие соединения с Elasticsearch.")

@@ -32,7 +32,7 @@ async def main():
 
         # Запуск ETL-процесса
         logger.info("Запуск ETL-процесса для жанров...")
-        films_index = settings.ELASTIC_INDEX  # Индекс фильмов из настроек
+        films_index = "films"  # Индекс фильмов
         genres_index = "genres"  # Индекс жанров
 
         await etl_service.run_etl(films_index=films_index, genres_index=genres_index)
