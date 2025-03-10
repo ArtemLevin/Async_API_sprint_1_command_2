@@ -6,7 +6,7 @@ from fastapi import Depends
 from pydantic import BaseModel
 
 from src.core.exceptions import CheckCacheError, CheckElasticError
-from src.db.elastic import get_elastic
+from src.db.elastic import get_elastic, settings
 from src.db.redis_client import get_redis
 from src.models.models import GenreBase
 from src.services.base_service import BaseService
@@ -67,7 +67,9 @@ class GenreService(BaseService):
         # Если нет в кеше, ищем в Elasticsearch
 
         # Формируем тело запроса для Elasticsearch
-        body = {"query": {"match_all": {}}}
+        body = {
+            "query": {"match_all": {}}, "size" : settings.ELASTIC_RESPONSE_SIZE
+        }
 
         # Проверяем наличие результата в Elasticsearch
         try:
@@ -98,7 +100,7 @@ class GenreService(BaseService):
         model = GenreBase
 
         # Формируем тело запроса для Elasticsearch
-        body = {"query": {}}
+        body = {"query": {}, "size" : settings.ELASTIC_RESPONSE_SIZE}
 
         #  Поиск, если есть
         if query:
