@@ -16,7 +16,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 es_client = AsyncElasticsearch(
-    hosts=[f'http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}']
+    hosts=[
+        f'{settings.ELASTIC_SCHEME}://{settings.ELASTIC_HOST}:'
+        f'{settings.ELASTIC_PORT}'
+    ]
 )
 
 elastic_service = ElasticService(es_client)
