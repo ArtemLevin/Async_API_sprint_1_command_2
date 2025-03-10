@@ -22,7 +22,8 @@ async def get_elastic() -> ElasticService:
         try:
             es_client = AsyncElasticsearch(
                 hosts=[
-                    f"http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}"
+                    f"{settings.ELASTIC_SCHEME}://{settings.ELASTIC_HOST}:"
+                    f"{settings.ELASTIC_PORT}"
                 ]
             )
             if not await es_client.ping():

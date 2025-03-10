@@ -19,7 +19,10 @@ async def main():
         # Создание асинхронного клиента Elasticsearch
         logger.info("Инициализация клиента Elasticsearch...")
         es_client = AsyncElasticsearch(
-            hosts=[f"http://{settings.ELASTIC_HOST}:{settings.ELASTIC_PORT}"],
+            hosts=[
+                f"{settings.ELASTIC_SCHEME}://{settings.ELASTIC_HOST}:"
+                f"{settings.ELASTIC_PORT}"
+            ],
             request_timeout=30,
         )
 

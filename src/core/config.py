@@ -1,6 +1,7 @@
 import os
 from typing import Any, ClassVar
 
+from dns.query import https
 from elastic_transport import TransportError as ESTransportError
 from elasticsearch import ApiError as ESApiError
 from pydantic import Field
@@ -19,6 +20,7 @@ class Settings(BaseSettings):
     # Конфигурация Elasticsearch
     ELASTIC_HOST: str = Field("elasticsearch", env="ELASTIC_HOST")
     ELASTIC_PORT: int = Field(9200, env="ELASTIC_PORT")
+    ELASTIC_SCHEME: str = Field("http", env="ELASTIC_SCHEME")
 
     # Директория проекта
     BASE_DIR: str = Field(
