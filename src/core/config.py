@@ -31,8 +31,10 @@ class Settings(BaseSettings):
 
     REDIS_EXCEPTIONS: Any = (RedisError,)
 
+    ELASTIC_RESPONSE_SIZE: int = 1000
+
     # Настройки кеширования
-    FILM_CACHE_EXPIRE_IN_SECONDS: int = 300
+    CACHE_EXPIRE_IN_SECONDS: int = 300
 
     NOT_FOUND: ClassVar[bytes] = b'"not_found"'
 

@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import Depends
 from pydantic import BaseModel
 
+from src.core.config import settings
 from src.core.exceptions import CheckCacheError, CheckElasticError
 from src.db.elastic import get_elastic
 from src.db.redis_client import get_redis
@@ -109,7 +110,7 @@ class PersonService(BaseService):
                 },
             ],
             "minimum_should_match": 1,
-        }}}
+        }}, "size" : settings.ELASTIC_RESPONSE_SIZE}
 
         # Проверяем наличие результата в Elasticsearch
         try:
