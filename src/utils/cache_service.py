@@ -13,7 +13,7 @@ class CacheService:
     def __init__(
         self,
         redis_client: Redis,
-        cache_expire: int = settings.FILM_CACHE_EXPIRE_IN_SECONDS,
+        cache_expire: int = settings.CACHE_EXPIRE_IN_SECONDS,
     ):
         self.redis_client = redis_client
         self.cache_expire = cache_expire
